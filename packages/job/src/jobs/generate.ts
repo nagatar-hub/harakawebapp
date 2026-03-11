@@ -315,8 +315,9 @@ export async function runGenerate() {
         // 行別の価格Y微調整（Pokemon）
         const rowPriceAdjust = franchise === 'Pokemon'
           ? {
-              3: { priceHighYDelta: 3, priceLowYDelta: 1.5 },  // 4段目
-              4: { priceLowYDelta: -2 },                        // 5段目
+              1: { priceLowYDelta: 3 },                         // 2段目
+              3: { priceHighYDelta: 3, priceLowYDelta: 1.5 },   // 4段目
+              4: { priceLowYDelta: -4 },                         // 5段目(最下段)
             } as Record<number, { priceHighYDelta?: number; priceLowYDelta?: number }>
           : undefined;
 
