@@ -312,6 +312,14 @@ export async function runGenerate() {
           ? { cardYDelta: 4, priceYDelta: 0 }
           : { cardYDelta: -2, priceYDelta: 3 }; // Pokemon / ONE PIECE
 
+        // 行別の価格Y微調整（Pokemon）
+        const rowPriceAdjust = franchise === 'Pokemon'
+          ? {
+              3: { priceHighYDelta: 3, priceLowYDelta: 1.5 },  // 4段目
+              4: { priceLowYDelta: -2 },                        // 5段目
+            } as Record<number, { priceHighYDelta?: number; priceLowYDelta?: number }>
+          : undefined;
+
         // 画像合成
         try {
           const imageBuffer = await composePage({
@@ -325,6 +333,7 @@ export async function runGenerate() {
             dateText,
             skipPriceLow: isBOX,
             layoutAdjust,
+            rowPriceAdjust,
             totalSlots: profile.total_slots,
           });
 

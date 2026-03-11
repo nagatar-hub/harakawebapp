@@ -38,6 +38,8 @@ export interface ComposePageParams {
   skipPriceLow?: boolean;
   /** レイアウト微調整: 全行に固定オフセット */
   layoutAdjust?: { cardYDelta: number; priceYDelta: number };
+  /** 行別の価格Y微調整: rowIndex → { priceHighYDelta, priceLowYDelta } */
+  rowPriceAdjust?: Record<number, { priceHighYDelta?: number; priceLowYDelta?: number }>;
   /** 空きスロットをカード裏面で埋める枚数 */
   totalSlots?: number;
 }
@@ -125,6 +127,7 @@ export async function composePage(params: ComposePageParams): Promise<Buffer> {
     dateText,
     skipPriceLow,
     layoutAdjust,
+    rowPriceAdjust,
     totalSlots,
   } = params;
 
@@ -215,10 +218,11 @@ export async function composePage(params: ComposePageParams): Promise<Buffer> {
         color: '#CC0000',
         fontSize,
       });
+      const rowAdj = rowPriceAdjust?.[rowIndex];
       composites.push({
         input: priceHighSvg,
         left: priceX,
-        top: rowConfig.priceHighY + adjustPriceY,
+        top: Math.round(rowConfig.priceHighY + adjustPriceY + (rowAdj?.priceHighYDelta ?? 0)),
       });
 
       // price_low（青） — skipPriceLow が true の場合はスキップ
@@ -235,7 +239,7 @@ export async function composePage(params: ComposePageParams): Promise<Buffer> {
         composites.push({
           input: priceLowSvg,
           left: priceX,
-          top: rowConfig.priceLowY + adjustPriceY,
+          top: Math.round(rowConfig.priceLowY + adjustPriceY + (rowAdj?.priceLowYDelta ?? 0)),
         });
       }
     }
