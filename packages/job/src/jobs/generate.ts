@@ -334,7 +334,7 @@ export async function runGenerate() {
           ? {
               1: { priceLowYDelta: 3 },                         // 2段目
               3: { priceHighYDelta: 3, priceLowYDelta: 1.5 },   // 4段目
-              4: { priceLowYDelta: -4 },                         // 5段目(最下段)
+              4: { priceLowYDelta: 4 },                          // 5段目(最下段)
             } as Record<number, { priceHighYDelta?: number; priceLowYDelta?: number }>
           : undefined;
 
