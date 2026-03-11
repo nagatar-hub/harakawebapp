@@ -109,6 +109,21 @@ export type PreparedCardRow = {
   created_at: string;
 };
 
+export type PageStatus = 'pending' | 'generated' | 'failed';
+
+export type GeneratedPageRow = {
+  id: string;
+  run_id: string;
+  franchise: string;
+  page_index: number;
+  page_label: string | null;
+  card_ids: string[];
+  image_key: string | null;
+  image_url: string | null;
+  status: PageStatus;
+  created_at: string;
+};
+
 export type Database = {
   public: {
     Tables: {
@@ -140,6 +155,15 @@ export type Database = {
         Row: PreparedCardRow;
         Insert: Omit<PreparedCardRow, 'id' | 'created_at'> & { id?: string; created_at?: string };
         Update: Partial<Omit<PreparedCardRow, 'id' | 'created_at'>>;
+        Relationships: [];
+      };
+      generated_page: {
+        Row: GeneratedPageRow;
+        Insert: Omit<GeneratedPageRow, 'id' | 'created_at' | 'image_key' | 'image_url' | 'status'> & {
+          id?: string; created_at?: string;
+          image_key?: string | null; image_url?: string | null; status?: PageStatus;
+        };
+        Update: Partial<Omit<GeneratedPageRow, 'id' | 'created_at'>>;
         Relationships: [];
       };
     };

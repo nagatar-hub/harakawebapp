@@ -11,7 +11,9 @@
  */
 
 import { createSupabaseClient } from '../lib/supabase.js';
-import { refreshAccessToken, fetchSheetValues } from '../lib/google-sheets.js';
+import { fetchSheetValues } from '../lib/google-sheets.js';
+import { getAccessToken } from '../lib/auth.js';
+import { batchInsert } from '../lib/batch.js';
 import { parseKecakRows } from '../lib/kecak-parser.js';
 import { buildLookupMap } from '../lib/db-lookup.js';
 import { prepareCards } from '../lib/prepare-cards.js';
@@ -19,65 +21,7 @@ import type { Database, Franchise } from '@haraka/shared';
 import { FRANCHISES, KECAK_SHEET_MAP } from '@haraka/shared';
 
 type RunRow = Database['public']['Tables']['run']['Row'];
-type RawImportInsert = Database['public']['Tables']['raw_import']['Insert'];
 type RawImportRow = Database['public']['Tables']['raw_import']['Row'];
-
-// ---------------------------------------------------------------------------
-// 認証情報取得
-// ---------------------------------------------------------------------------
-
-interface OAuthCredentials {
-  refreshToken: string;
-  clientId: string;
-  clientSecret: string;
-}
-
-/**
- * OAuth 認証情報を取得する。
- * ローカル: .env から読み込み
- * Cloud Run: Secret Manager から読み込み
- */
-async function getCredentials(): Promise<OAuthCredentials> {
-  // ローカル開発: .env に値がある場合はそれを使用
-  if (process.env.GOOGLE_REFRESH_TOKEN && process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET) {
-    return {
-      refreshToken: process.env.GOOGLE_REFRESH_TOKEN,
-      clientId: process.env.GOOGLE_CLIENT_ID,
-      clientSecret: process.env.GOOGLE_CLIENT_SECRET,
-    };
-  }
-
-  // Cloud Run: Secret Manager から取得
-  const { getSecret } = await import('../lib/secret-manager.js');
-  const [refreshToken, clientId, clientSecret] = await Promise.all([
-    getSecret('haraka-oauth-refresh-token'),
-    getSecret('haraka-oauth-client-id'),
-    getSecret('haraka-oauth-client-secret'),
-  ]);
-  return { refreshToken, clientId, clientSecret };
-}
-
-// ---------------------------------------------------------------------------
-// バッチ挿入ヘルパー
-// ---------------------------------------------------------------------------
-
-const BATCH_SIZE = 500;
-
-/**
- * 大量データをバッチに分割して insert する
- */
-async function batchInsert<T extends Record<string, unknown>>(
-  supabase: ReturnType<typeof createSupabaseClient>,
-  table: string,
-  rows: T[],
-): Promise<void> {
-  for (let i = 0; i < rows.length; i += BATCH_SIZE) {
-    const batch = rows.slice(i, i + BATCH_SIZE);
-    const { error } = await (supabase.from(table) as ReturnType<ReturnType<typeof createSupabaseClient>['from']>)
-      .insert(batch);
-    if (error) throw new Error(`${table} insert failed (batch ${Math.floor(i / BATCH_SIZE) + 1}): ${error.message}`);
-  }
-}
 
 // ---------------------------------------------------------------------------
 // メイン処理
@@ -97,8 +41,7 @@ export async function runSync() {
 
   try {
     // ---- 2. OAuth access token 取得 ----
-    const creds = await getCredentials();
-    const accessToken = await refreshAccessToken(creds);
+    const accessToken = await getAccessToken();
     console.log('[sync] Access token 取得完了');
 
     const kecakSpreadsheetId = process.env.KECAK_SPREADSHEET_ID;

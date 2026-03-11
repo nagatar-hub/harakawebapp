@@ -49,13 +49,13 @@ describe('buildAuthorizationUrl', () => {
     expect(parsed.searchParams.get('response_type')).toBe('code');
   });
 
-  it('spreadsheets.readonly スコープが設定される', () => {
+  it('spreadsheets.readonly と drive.readonly スコープが設定される', () => {
     const url = buildAuthorizationUrl(baseParams);
     const parsed = new URL(url);
 
-    expect(parsed.searchParams.get('scope')).toBe(
-      'https://www.googleapis.com/auth/spreadsheets.readonly'
-    );
+    const scope = parsed.searchParams.get('scope')!;
+    expect(scope).toContain('https://www.googleapis.com/auth/spreadsheets.readonly');
+    expect(scope).toContain('https://www.googleapis.com/auth/drive.readonly');
   });
 
   it('access_type=offline が設定される（refresh_token取得のため）', () => {

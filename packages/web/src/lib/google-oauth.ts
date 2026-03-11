@@ -40,8 +40,10 @@ export interface EnvVars {
 
 const GOOGLE_AUTH_ENDPOINT = 'https://accounts.google.com/o/oauth2/v2/auth';
 const GOOGLE_TOKEN_ENDPOINT = 'https://oauth2.googleapis.com/token';
-const SPREADSHEETS_SCOPE =
-  'https://www.googleapis.com/auth/spreadsheets.readonly';
+const OAUTH_SCOPES = [
+  'https://www.googleapis.com/auth/spreadsheets.readonly',
+  'https://www.googleapis.com/auth/drive.readonly',
+].join(' ');
 const DEFAULT_BASE_URL = 'http://localhost:3001';
 
 // ---------------------------------------------------------------------------
@@ -62,7 +64,7 @@ export function buildAuthorizationUrl(params: {
     client_id: params.clientId,
     redirect_uri: params.redirectUri,
     response_type: 'code',
-    scope: SPREADSHEETS_SCOPE,
+    scope: OAUTH_SCOPES,
     access_type: 'offline',
     prompt: 'consent',
   });
