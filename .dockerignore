@@ -1,0 +1,14 @@
+node_modules/
+dist/
+.next/
+.env
+.env.*
+*.tsbuildinfo
+.turbo/
+.vercel/
+.git/
+.gitignore
+.dockerignore
+*.md
+supabase/
+docs/
