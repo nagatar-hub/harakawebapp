@@ -34,6 +34,12 @@ export interface ComposePageParams {
   cardImageBuffers: Map<string, Buffer>;
   /** 日付文字列 (例: "2026/03/11") */
   dateText: string;
+  /** true の場合 price_low（青）をスキップ（BOXページ用） */
+  skipPriceLow?: boolean;
+  /** レイアウト微調整: 行ごとの累積オフセット */
+  layoutAdjust?: { cardYDelta: number; priceYDelta: number };
+  /** 空きスロットをカード裏面で埋める枚数 */
+  totalSlots?: number;
 }
 
 // ---------------------------------------------------------------------------
@@ -131,6 +137,9 @@ export async function composePage(params: ComposePageParams): Promise<Buffer> {
     rarityIconBuffers,
     cardImageBuffers,
     dateText,
+    skipPriceLow,
+    layoutAdjust,
+    totalSlots,
   } = params;
 
   const cols = assetProfile.grid_cols;
@@ -152,6 +161,8 @@ export async function composePage(params: ComposePageParams): Promise<Buffer> {
     if (rowIndex >= layout.rows.length) break;
 
     const rowConfig = layout.rows[rowIndex];
+    const adjustCardY = (layoutAdjust?.cardYDelta ?? 0) * rowIndex;
+    const adjustPriceY = (layoutAdjust?.priceYDelta ?? 0) * rowIndex;
     const x = layout.startX + col * layout.colWidth;
 
     // ---- カード画像 ----
@@ -177,7 +188,7 @@ export async function composePage(params: ComposePageParams): Promise<Buffer> {
     composites.push({
       input: cardBuffer,
       left: x,
-      top: rowConfig.cardY,
+      top: rowConfig.cardY + adjustCardY,
     });
 
     // ---- レアリティアイコン ----
@@ -196,7 +207,7 @@ export async function composePage(params: ComposePageParams): Promise<Buffer> {
         composites.push({
           input: iconBuffer,
           left: x + (layout.rarityIconOffsetX ?? 0),
-          top: rowConfig.cardY + (layout.rarityIconOffsetY ?? 0),
+          top: rowConfig.cardY + adjustCardY + (layout.rarityIconOffsetY ?? 0),
         });
       } catch {
         // アイコンリサイズ失敗は無視
@@ -221,11 +232,11 @@ export async function composePage(params: ComposePageParams): Promise<Buffer> {
       composites.push({
         input: priceHighSvg,
         left: priceX,
-        top: rowConfig.priceHighY,
+        top: rowConfig.priceHighY + adjustPriceY,
       });
 
-      // price_low（青）
-      if (card.price_low && card.price_low > 0) {
+      // price_low（青） — skipPriceLow が true の場合はスキップ
+      if (!skipPriceLow && card.price_low && card.price_low > 0) {
         const priceLowText = formatPrice(card.price_low, assetProfile.price_format);
         const priceLowSvg = createPriceTextSvg({
           text: priceLowText,
@@ -238,10 +249,28 @@ export async function composePage(params: ComposePageParams): Promise<Buffer> {
         composites.push({
           input: priceLowSvg,
           left: priceX,
-          top: rowConfig.priceLowY,
+          top: rowConfig.priceLowY + adjustPriceY,
         });
       }
     }
+  }
+
+  // 空きスロットをカード裏面で埋める
+  const slotsToFill = totalSlots ?? 0;
+  for (let i = cards.length; i < slotsToFill; i++) {
+    const col = i % cols;
+    const rowIndex = Math.floor(i / cols);
+    if (rowIndex >= layout.rows.length) break;
+
+    const rowConfig = layout.rows[rowIndex];
+    const adjustCardY = (layoutAdjust?.cardYDelta ?? 0) * rowIndex;
+    const x = layout.startX + col * layout.colWidth;
+
+    composites.push({
+      input: cardBackResized,
+      left: x,
+      top: rowConfig.cardY + adjustCardY,
+    });
   }
 
   // ---- 日付スタンプ ----

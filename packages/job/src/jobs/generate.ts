@@ -35,6 +35,53 @@ type RunRow = Database['public']['Tables']['run']['Row'];
 type GeneratedPageInsert = Database['public']['Tables']['generated_page']['Insert'];
 
 // ---------------------------------------------------------------------------
+// ヘルパー関数
+// ---------------------------------------------------------------------------
+
+/**
+ * 同一 list_no + grade のカードを重複排除する。
+ * 優先順位: KECAK > SPECTRE > manual（同一ソースなら price_high が高い方）
+ * list_no がない場合は card.id をキーとして重複排除しない。
+ */
+function deduplicateByListNo(cards: PreparedCardRow[]): PreparedCardRow[] {
+  const SOURCE_PRIORITY: Record<string, number> = { kecak: 2, spectre: 1, manual: 0 };
+  const map = new Map<string, PreparedCardRow>();
+  for (const card of cards) {
+    const key = card.list_no
+      ? `${card.list_no}|${card.grade ?? ''}`
+      : card.id;
+    const existing = map.get(key);
+    if (!existing) {
+      map.set(key, card);
+      continue;
+    }
+    const existPri = SOURCE_PRIORITY[existing.source] ?? 0;
+    const cardPri = SOURCE_PRIORITY[card.source] ?? 0;
+    if (cardPri > existPri || (cardPri === existPri && (card.price_high ?? 0) > (existing.price_high ?? 0))) {
+      map.set(key, card);
+    }
+  }
+  return Array.from(map.values());
+}
+
+const LABEL_MAP: Record<string, string> = {
+  'ピカチュウ': 'pikachu',
+  'イーブイ': 'eevee',
+  'リザードン': 'charizard',
+  'サポート': 'support',
+  'ゲンガー': 'gengar',
+  '青眼': 'blue-eyes',
+  'ブラックマジシャン': 'dark-magician',
+};
+
+function romanizeLabel(label: string): string {
+  for (const [jp, en] of Object.entries(LABEL_MAP)) {
+    label = label.replace(jp, en);
+  }
+  return label.replace(/[^a-zA-Z0-9._-]/g, '') || 'page';
+}
+
+// ---------------------------------------------------------------------------
 // メイン処理
 // ---------------------------------------------------------------------------
 
@@ -107,6 +154,20 @@ export async function runGenerate() {
       }
       console.log(`[generate]   カード: ${cards.length}件`);
 
+      // 重複排除: 同一 list_no + grade は KECAK 優先 → price_high 高い方
+      const deduplicatedCards = deduplicateByListNo(cards);
+      console.log(`[generate]   重複排除後: ${deduplicatedCards.length}件（${cards.length - deduplicatedCards.length}件除外）`);
+
+      // タグなしカードを除外してアラート
+      const untaggedCards = deduplicatedCards.filter(c => !c.tag);
+      const taggedCards = deduplicatedCards.filter(c => c.tag);
+      if (untaggedCards.length > 0) {
+        console.warn(`[generate]   ⚠️ タグ未設定カード ${untaggedCards.length}件（ページ生成から除外）:`);
+        for (const c of untaggedCards) {
+          console.warn(`[generate]     - ${c.card_name} (${c.grade ?? ''} ${c.list_no ?? ''}) price=¥${(c.price_high ?? 0).toLocaleString()}`);
+        }
+      }
+
       // 4b. asset_profile 取得
       const { data: profile, error: profileError } = await supabase
         .from('asset_profile')
@@ -124,9 +185,9 @@ export async function runGenerate() {
         .returns<RuleRow[]>();
       if (rulesError) throw new Error(`rule 取得失敗: ${rulesError.message}`);
 
-      // 4d. ページプランニング
+      // 4d. ページプランニング（タグなしカードは除外済み）
       const layout = profile.layout_config as LayoutConfig;
-      const pagePlans = planPages(cards, rules ?? [], profile.total_slots);
+      const pagePlans = planPages(taggedCards, rules ?? [], profile.total_slots);
       console.log(`[generate]   ページ数: ${pagePlans.length}`);
 
       if (pagePlans.length === 0) continue;
@@ -199,7 +260,7 @@ export async function runGenerate() {
       }
 
       // 4g. 各ページの画像を生成
-      const cardById = new Map(cards.map(c => [c.id, c]));
+      const cardById = new Map(taggedCards.map(c => [c.id, c]));
 
       // generated_page レコードを取得（ID が必要）
       const { data: generatedPages } = await supabase
@@ -232,6 +293,11 @@ export async function runGenerate() {
           if (buf) cardImageBuffers.set(card.id, buf);
         });
 
+        // レイアウト微調整
+        const layoutAdjust = franchise === 'YU-GI-OH!'
+          ? { cardYDelta: 4, priceYDelta: 0 }
+          : { cardYDelta: -2, priceYDelta: 3 }; // Pokemon / ONE PIECE
+
         // 画像合成
         try {
           const imageBuffer = await composePage({
@@ -243,13 +309,16 @@ export async function runGenerate() {
             rarityIconBuffers,
             cardImageBuffers,
             dateText,
+            skipPriceLow: isBOX,
+            layoutAdjust,
+            totalSlots: profile.total_slots,
           });
 
           // Supabase Storage にアップロード
-          // キーは ASCII のみ許容 — 非ASCII文字を除去してインデックスで一意性を担保
-          const safeLabel = plan.label.replace(/[^a-zA-Z0-9._-]/g, '');
-          const safeFranchise = franchise.replace(/[^a-zA-Z0-9._-]/g, '');
-          const storageKey = `generated/${run.id}/${safeFranchise || 'franchise'}/page_${pageIdx}_${safeLabel || 'rule'}.png`;
+          // キーは ASCII のみ許容 — ラベルはローマ字マップで変換してインデックスで一意性を担保
+          const safeLabel = romanizeLabel(plan.label);
+          const safeFranchise = franchise.replace(/[^a-zA-Z0-9._-]/g, '') || 'franchise';
+          const storageKey = `generated/${run.id}/${safeFranchise}/page_${pageIdx}_${safeLabel}.png`;
 
           const { error: uploadError } = await supabase.storage
             .from('haraka-images')
