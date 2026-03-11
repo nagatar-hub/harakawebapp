@@ -190,6 +190,20 @@ export async function runGenerate() {
       const pagePlans = planPages(taggedCards, rules ?? [], profile.total_slots);
       console.log(`[generate]   ページ数: ${pagePlans.length}`);
 
+      // タグ構成ログ（グルーピング確認用）
+      const cardById = new Map(taggedCards.map(c => [c.id, c]));
+      for (const plan of pagePlans) {
+        const tagCounts = new Map<string, number>();
+        for (const id of plan.cardIds) {
+          const tag = cardById.get(id)?.tag || '?';
+          tagCounts.set(tag, (tagCounts.get(tag) || 0) + 1);
+        }
+        const tagSummary = [...tagCounts.entries()]
+          .map(([t, n]) => `${t}(${n})`)
+          .join(', ');
+        console.log(`[generate]     ${plan.label} [${plan.cardIds.length}枚]: ${tagSummary}`);
+      }
+
       if (pagePlans.length === 0) continue;
 
       // generated_page レコードを insert
@@ -260,7 +274,7 @@ export async function runGenerate() {
       }
 
       // 4g. 各ページの画像を生成
-      const cardById = new Map(taggedCards.map(c => [c.id, c]));
+      // cardById は上でタグ構成ログ用に定義済み
 
       // generated_page レコードを取得（ID が必要）
       const { data: generatedPages } = await supabase
