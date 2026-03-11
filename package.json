@@ -17,6 +17,7 @@
     "typecheck": "npm -ws --if-present run typecheck"
   },
   "devDependencies": {
+    "supabase": "^2.78.1",
     "typescript": "^5.7.0"
   }
 }
