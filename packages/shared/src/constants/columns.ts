@@ -10,14 +10,14 @@ export const COLS = {
 } as const;
 
 export const DB_COLS = {
-  TITLE: 1,
-  GROUP: 2,
-  CARD_NAME: 3,
-  TYPE: 4,
-  CARD_NO: 5,
-  IMAGE: 6,
-  ALT_IMAGE: 7,
-  RARITY: 8,
+  GROUP: 1,
+  CARD_NAME: 2,
+  TYPE: 3,
+  CARD_NO: 4,
+  IMAGE: 5,
+  RARITY_ICON: 6,
+  PRICE_HIGH: 7,
+  PRICE_LOW: 8,
 } as const;
 
 export const SPECTRE_MAP_COLS = {

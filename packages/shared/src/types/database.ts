@@ -71,6 +71,44 @@ export type AssetProfileRow = {
   created_at: string;
 };
 
+export type ImageStatus = 'unchecked' | 'ok' | 'fallback' | 'dead';
+export type CardSource = 'kecak' | 'spectre' | 'manual';
+
+export type RawImportRow = {
+  id: string;
+  run_id: string;
+  franchise: string;
+  card_name: string;
+  grade: string | null;
+  list_no: string | null;
+  image_url: string | null;
+  rarity: string | null;
+  demand: number | null;
+  kecak_price: number | null;
+  raw_row: Record<string, unknown> | null;
+  created_at: string;
+};
+
+export type PreparedCardRow = {
+  id: string;
+  run_id: string;
+  raw_import_id: string | null;
+  franchise: string;
+  card_name: string;
+  grade: string | null;
+  list_no: string | null;
+  image_url: string | null;
+  alt_image_url: string | null;
+  rarity: string | null;
+  rarity_icon_url: string | null;
+  tag: string | null;
+  price_high: number | null;
+  price_low: number | null;
+  image_status: ImageStatus;
+  source: CardSource;
+  created_at: string;
+};
+
 export type Database = {
   public: {
     Tables: {
@@ -90,6 +128,18 @@ export type Database = {
         Row: AssetProfileRow;
         Insert: Omit<AssetProfileRow, 'id' | 'created_at'> & { id?: string; created_at?: string };
         Update: Partial<Omit<AssetProfileRow, 'id' | 'created_at'>>;
+        Relationships: [];
+      };
+      raw_import: {
+        Row: RawImportRow;
+        Insert: Omit<RawImportRow, 'id' | 'created_at'> & { id?: string; created_at?: string };
+        Update: Partial<Omit<RawImportRow, 'id' | 'created_at'>>;
+        Relationships: [];
+      };
+      prepared_card: {
+        Row: PreparedCardRow;
+        Insert: Omit<PreparedCardRow, 'id' | 'created_at'> & { id?: string; created_at?: string };
+        Update: Partial<Omit<PreparedCardRow, 'id' | 'created_at'>>;
         Relationships: [];
       };
     };

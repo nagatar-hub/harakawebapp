@@ -6,7 +6,9 @@
     "dev": "tsx src/index.ts",
     "build": "tsc",
     "start": "node dist/index.js",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test": "jest --no-coverage",
+    "test:watch": "jest --watch"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.49.0",
@@ -14,8 +16,11 @@
     "@haraka/shared": "*"
   },
   "devDependencies": {
-    "typescript": "^5.7.0",
+    "@types/jest": "^30.0.0",
+    "@types/node": "^22.0.0",
+    "jest": "^30.3.0",
+    "ts-jest": "^29.4.6",
     "tsx": "^4.19.0",
-    "@types/node": "^22.0.0"
+    "typescript": "^5.7.0"
   }
 }

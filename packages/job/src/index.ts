@@ -1,4 +1,5 @@
 import { createSupabaseClient } from './lib/supabase.js';
+import { runSync } from './jobs/sync.js';
 
 async function main() {
   const jobName = process.env.JOB_NAME || 'healthcheck';
@@ -7,7 +8,7 @@ async function main() {
   try {
     switch (jobName) {
       case 'sync':
-        console.log('sync job is not implemented yet (Phase 1)');
+        await runSync();
         break;
       case 'generate':
         console.log('generate job is not implemented yet (Phase 4)');
