@@ -46,6 +46,9 @@ export interface ComposePageParams {
 // SVG テキスト生成
 // ---------------------------------------------------------------------------
 
+/** SVG で使用するゴシック系フォントフォールバック（SVG属性内で使うため &quot; は不可） */
+const GOTHIC_FONT = 'Meiryo, Yu Gothic, Arial, sans-serif';
+
 /**
  * 価格テキスト用 SVG Buffer を生成
  */
@@ -57,41 +60,24 @@ function createPriceTextSvg(params: {
   color: string;
   fontSize: number;
 }): Buffer {
-  const { text, width, height, fontFamily, color, fontSize } = params;
-  const svg = `<svg width="${width}" height="${height}" xmlns="http://www.w3.org/2000/svg">
-    <text
-      x="${width / 2}"
-      y="${height / 2 + fontSize * 0.35}"
-      font-family="${fontFamily}, sans-serif"
-      font-size="${fontSize}"
-      fill="${color}"
-      text-anchor="middle"
-      dominant-baseline="auto"
-    >${escapeXml(text)}</text>
-  </svg>`;
+  const { text, width, height, color, fontSize } = params;
+  const y = Math.round(height / 2 + fontSize * 0.35);
+  const svg = `<svg width="${width}" height="${height}" xmlns="http://www.w3.org/2000/svg"><text x="${width / 2}" y="${y}" font-family="${GOTHIC_FONT}" font-size="${fontSize}" font-weight="bold" fill="${color}" text-anchor="middle">${escapeXml(text)}</text></svg>`;
   return Buffer.from(svg);
 }
 
 /**
- * 日付テキスト用 SVG Buffer を生成
+ * 日付テキスト用 SVG Buffer を生成（白文字 + 黒縁）
  */
 function createDateTextSvg(params: {
   text: string;
   fontFamily: string;
 }): Buffer {
-  const { text, fontFamily } = params;
+  const { text } = params;
   const width = 300;
-  const height = 40;
-  const fontSize = 24;
-  const svg = `<svg width="${width}" height="${height}" xmlns="http://www.w3.org/2000/svg">
-    <text
-      x="0"
-      y="${fontSize}"
-      font-family="${fontFamily}, sans-serif"
-      font-size="${fontSize}"
-      fill="#333333"
-    >${escapeXml(text)}</text>
-  </svg>`;
+  const height = 60;
+  const fontSize = 36;
+  const svg = `<svg width="${width}" height="${height}" xmlns="http://www.w3.org/2000/svg"><text x="0" y="${fontSize}" font-family="${GOTHIC_FONT}" font-size="${fontSize}" font-weight="bold" fill="white" stroke="black" stroke-width="3" paint-order="stroke fill">${escapeXml(text)}</text></svg>`;
   return Buffer.from(svg);
 }
 

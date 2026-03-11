@@ -135,7 +135,7 @@ export async function runGenerate() {
     // ---- 4. franchise ごとにページ生成 ----
     let totalPages = 0;
     const today = new Date();
-    const dateText = `${today.getFullYear()}/${String(today.getMonth() + 1).padStart(2, '0')}/${String(today.getDate()).padStart(2, '0')}`;
+    const dateText = `${String(today.getMonth() + 1).padStart(2, '0')}/${String(today.getDate()).padStart(2, '0')}`;
 
     for (const franchise of FRANCHISES) {
       console.log(`[generate] === ${franchise} ===`);

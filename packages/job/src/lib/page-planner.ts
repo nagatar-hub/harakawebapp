@@ -197,8 +197,11 @@ export function planPages(
 
     switch (rule.behavior) {
       case 'isolate': {
-        // 専用ページに振り分け
-        const rulePages = splitIntoPages(matchedCards, rule.tag_pattern, totalSlots);
+        // 専用ページに振り分け（サブタグでグルーピング）
+        const rulePages = splitIntoGroupedPages(matchedCards, totalSlots);
+        rulePages.forEach((page, idx) => {
+          page.label = idx === 0 ? rule.tag_pattern : `${rule.tag_pattern}-${idx + 1}`;
+        });
         pages.push(...rulePages);
         break;
       }
@@ -208,7 +211,10 @@ export function planPages(
       }
       case 'merge': {
         // merge: 将来実装。現時点では isolate と同じ動作
-        const rulePages = splitIntoPages(matchedCards, rule.tag_pattern, totalSlots);
+        const rulePages = splitIntoGroupedPages(matchedCards, totalSlots);
+        rulePages.forEach((page, idx) => {
+          page.label = idx === 0 ? rule.tag_pattern : `${rule.tag_pattern}-${idx + 1}`;
+        });
         pages.push(...rulePages);
         break;
       }
