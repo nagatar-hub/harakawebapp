@@ -36,7 +36,7 @@ export interface ComposePageParams {
   dateText: string;
   /** true の場合 price_low（青）をスキップ（BOXページ用） */
   skipPriceLow?: boolean;
-  /** レイアウト微調整: 行ごとの累積オフセット */
+  /** レイアウト微調整: 全行に固定オフセット */
   layoutAdjust?: { cardYDelta: number; priceYDelta: number };
   /** 空きスロットをカード裏面で埋める枚数 */
   totalSlots?: number;
@@ -161,8 +161,8 @@ export async function composePage(params: ComposePageParams): Promise<Buffer> {
     if (rowIndex >= layout.rows.length) break;
 
     const rowConfig = layout.rows[rowIndex];
-    const adjustCardY = (layoutAdjust?.cardYDelta ?? 0) * rowIndex;
-    const adjustPriceY = (layoutAdjust?.priceYDelta ?? 0) * rowIndex;
+    const adjustCardY = layoutAdjust?.cardYDelta ?? 0;
+    const adjustPriceY = layoutAdjust?.priceYDelta ?? 0;
     const x = layout.startX + col * layout.colWidth;
 
     // ---- カード画像 ----
@@ -263,7 +263,7 @@ export async function composePage(params: ComposePageParams): Promise<Buffer> {
     if (rowIndex >= layout.rows.length) break;
 
     const rowConfig = layout.rows[rowIndex];
-    const adjustCardY = (layoutAdjust?.cardYDelta ?? 0) * rowIndex;
+    const adjustCardY = layoutAdjust?.cardYDelta ?? 0;
     const x = layout.startX + col * layout.colWidth;
 
     composites.push({
