@@ -103,6 +103,23 @@ export async function runGenerate() {
   await supabase.from('run').update({ status: 'running' }).eq('id', run.id);
 
   try {
+    // ---- 1.5. 過去の生成データをクリーンアップ ----
+    console.log('[generate] 過去データクリーンアップ中...');
+    // generated_page + spectre prepared_card を削除
+    await supabase.from('generated_page').delete().eq('run_id', run.id);
+    await supabase.from('prepared_card').delete().eq('run_id', run.id).eq('source', 'spectre');
+
+    // Storage の過去画像を削除（generated/{run_id}/ 配下）
+    for (const folder of ['Pokemon', 'ONEPIECE', 'YU-GI-OH']) {
+      const prefix = `generated/${run.id}/${folder}`;
+      const { data: files } = await supabase.storage.from('haraka-images').list(prefix);
+      if (files && files.length > 0) {
+        const paths = files.map(f => `${prefix}/${f.name}`);
+        await supabase.storage.from('haraka-images').remove(paths);
+        console.log(`[generate]   ${folder}: ${paths.length}件削除`);
+      }
+    }
+
     // ---- 2. OAuth access token 取得 ----
     const accessToken = await getAccessToken();
     console.log('[generate] Access token 取得完了');
