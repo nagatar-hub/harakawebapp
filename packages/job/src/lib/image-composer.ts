@@ -74,10 +74,10 @@ function createDateTextSvg(params: {
   fontFamily: string;
 }): Buffer {
   const { text } = params;
-  const width = 300;
-  const height = 60;
-  const fontSize = 36;
-  const svg = `<svg width="${width}" height="${height}" xmlns="http://www.w3.org/2000/svg"><text x="0" y="${fontSize}" font-family="${GOTHIC_FONT}" font-size="${fontSize}" font-weight="bold" fill="white" stroke="black" stroke-width="3" paint-order="stroke fill">${escapeXml(text)}</text></svg>`;
+  const width = 400;
+  const height = 100;
+  const fontSize = 72;
+  const svg = `<svg width="${width}" height="${height}" xmlns="http://www.w3.org/2000/svg"><text x="${width}" y="${fontSize}" font-family="${GOTHIC_FONT}" font-size="${fontSize}" font-weight="bold" fill="white" stroke="black" stroke-width="6" paint-order="stroke fill" text-anchor="end">${escapeXml(text)}</text></svg>`;
   return Buffer.from(svg);
 }
 
@@ -264,10 +264,11 @@ export async function composePage(params: ComposePageParams): Promise<Buffer> {
     text: dateText,
     fontFamily: assetProfile.font_family,
   });
+  // 日付 SVG は text-anchor="end" で右寄せ。dateX を右端基準に配置
   composites.push({
     input: dateSvg,
-    left: layout.dateX,
-    top: layout.dateY,
+    left: layout.dateX - 100,
+    top: layout.dateY - 20,
   });
 
   // ---- 合成実行 ----
