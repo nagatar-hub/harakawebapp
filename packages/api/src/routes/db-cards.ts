@@ -1,5 +1,6 @@
 import { Hono } from 'hono';
 import { createSupabaseClient } from '../lib/supabase.js';
+import { updateDbSheetCell } from '../lib/haraka-db-sheet.js';
 
 export const dbCardRoutes = new Hono();
 
@@ -57,4 +58,52 @@ dbCardRoutes.get('/db-cards/stats', async (c) => {
   errorCount = errCount ?? 0;
 
   return c.json({ total, byFranchise, errorCount });
+});
+
+/** db_card 個別更新（tag / alt_image_url） + シート書き戻し */
+dbCardRoutes.patch('/db-cards/:id', async (c) => {
+  const id = c.req.param('id');
+  const body = await c.req.json<{ tag?: string; alt_image_url?: string }>();
+  const supabase = createSupabaseClient();
+
+  // 更新対象フィールドを構築
+  const updates: Record<string, string | null> = {};
+  const sheetUpdates: { field: string; value: string }[] = [];
+
+  if (body.tag !== undefined) {
+    updates.tag = body.tag || null;
+    sheetUpdates.push({ field: 'tag', value: body.tag || '' });
+  }
+  if (body.alt_image_url !== undefined) {
+    updates.alt_image_url = body.alt_image_url || null;
+    sheetUpdates.push({ field: 'alt_image_url', value: body.alt_image_url || '' });
+  }
+
+  if (Object.keys(updates).length === 0) {
+    return c.json({ error: 'No fields to update' }, 400);
+  }
+
+  updates.updated_at = new Date().toISOString();
+
+  // Supabase 更新
+  const { data, error } = await supabase
+    .from('db_card')
+    .update(updates)
+    .eq('id', id)
+    .select('id, franchise, tag, card_name, grade, list_no, image_url, alt_image_url, rarity_icon, sheet_row_number')
+    .single();
+
+  if (error) return c.json({ error: error.message }, 500);
+  if (!data) return c.json({ error: 'Card not found' }, 404);
+
+  // シート書き戻し（非同期、エラーでもAPIレスポンスには影響しない）
+  if (data.sheet_row_number) {
+    for (const su of sheetUpdates) {
+      updateDbSheetCell(data.sheet_row_number, su.field, su.value).catch((err) => {
+        console.error(`[sheet] セル更新エラー: ${err.message}`);
+      });
+    }
+  }
+
+  return c.json(data);
 });

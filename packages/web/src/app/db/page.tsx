@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import { FranchiseTabs } from '@/components/franchise-tabs';
 
 type DbCard = {
@@ -29,6 +29,86 @@ const FRANCHISE_JA: Record<string, string> = {
 };
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080';
+
+/** インライン編集セル */
+function InlineEditCell({
+  value,
+  placeholder,
+  onSave,
+  renderDisplay,
+}: {
+  value: string;
+  placeholder?: string;
+  onSave: (newValue: string) => Promise<void>;
+  renderDisplay?: (value: string) => React.ReactNode;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(value);
+  const [saving, setSaving] = useState(false);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (editing) {
+      setDraft(value);
+      // 次ティックでfocusしないとrefがまだ無い場合がある
+      setTimeout(() => inputRef.current?.focus(), 0);
+    }
+  }, [editing, value]);
+
+  const handleSave = async () => {
+    if (draft === value) {
+      setEditing(false);
+      return;
+    }
+    setSaving(true);
+    try {
+      await onSave(draft);
+    } finally {
+      setSaving(false);
+      setEditing(false);
+    }
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      handleSave();
+    } else if (e.key === 'Escape') {
+      setEditing(false);
+    }
+  };
+
+  if (editing) {
+    return (
+      <input
+        ref={inputRef}
+        type="text"
+        value={draft}
+        onChange={(e) => setDraft(e.target.value)}
+        onBlur={handleSave}
+        onKeyDown={handleKeyDown}
+        disabled={saving}
+        placeholder={placeholder}
+        className="w-full px-2 py-1 text-sm border border-[#b8a080] rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-[#b8a080] disabled:opacity-50"
+      />
+    );
+  }
+
+  return (
+    <button
+      type="button"
+      onClick={() => setEditing(true)}
+      className="w-full text-left cursor-pointer hover:bg-[#e8ddd0] rounded-lg px-1 py-0.5 transition-colors group"
+      title="クリックで編集"
+    >
+      {renderDisplay ? renderDisplay(value) : (
+        <span className={value ? 'text-text-primary text-sm' : 'text-text-secondary text-xs italic'}>
+          {value || (placeholder ?? '未設定')}
+        </span>
+      )}
+    </button>
+  );
+}
 
 export default function DbPage() {
   const [cards, setCards] = useState<DbCard[]>([]);
@@ -65,6 +145,21 @@ export default function DbPage() {
   }, [filter, fetchCards]);
 
   useEffect(() => {
+    fetchStats();
+  }, [fetchStats]);
+
+  /** カード更新 PATCH */
+  const updateCard = useCallback(async (id: string, field: 'tag' | 'alt_image_url', value: string) => {
+    const res = await fetch(`${API_URL}/api/db-cards/${id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ [field]: value }),
+    });
+    if (!res.ok) throw new Error('更新に失敗しました');
+    const updated: DbCard = await res.json();
+    // ローカル state を更新
+    setCards((prev) => prev.map((c) => (c.id === id ? updated : c)));
+    // stats も再取得（エラー件数が変わる可能性）
     fetchStats();
   }, [fetchStats]);
 
@@ -106,8 +201,8 @@ export default function DbPage() {
                 <th className="px-4 py-5">カード名</th>
                 <th className="px-4 py-5 w-20">グレード</th>
                 <th className="px-4 py-5 w-24">品番</th>
-                <th className="px-4 py-5 w-36">タグ</th>
-                <th className="px-4 py-5 w-20">代替画像</th>
+                <th className="px-4 py-5 w-44">タグ</th>
+                <th className="px-4 py-5 w-48">代替画像URL</th>
                 <th className="px-4 py-5 w-16">レア</th>
               </tr>
             </thead>
@@ -122,7 +217,6 @@ export default function DbPage() {
                         alt=""
                         className="w-14 h-[78px] object-cover rounded-lg"
                         onError={(e) => {
-                          // 代替画像があれば切り替え
                           if (card.alt_image_url && (e.target as HTMLImageElement).src !== card.alt_image_url) {
                             (e.target as HTMLImageElement).src = card.alt_image_url;
                           }
@@ -149,26 +243,42 @@ export default function DbPage() {
                   {/* 品番 */}
                   <td className="px-4 py-3 text-text-secondary text-sm">{card.list_no || '-'}</td>
 
-                  {/* タグ */}
+                  {/* タグ（インライン編集） */}
                   <td className="px-4 py-3">
-                    {card.tag ? (
-                      <span className="inline-block px-3 py-1 bg-text-primary/10 text-text-primary rounded-full text-xs font-medium">
-                        {card.tag}
-                      </span>
-                    ) : (
-                      <span className="inline-block px-3 py-1 bg-red-50 text-red-500 border border-red-200 rounded-full text-xs font-medium">
-                        タグなし
-                      </span>
-                    )}
+                    <InlineEditCell
+                      value={card.tag || ''}
+                      placeholder="タグを入力"
+                      onSave={(v) => updateCard(card.id, 'tag', v)}
+                      renderDisplay={(v) =>
+                        v ? (
+                          <span className="inline-block px-3 py-1 bg-text-primary/10 text-text-primary rounded-full text-xs font-medium">
+                            {v}
+                          </span>
+                        ) : (
+                          <span className="inline-block px-3 py-1 bg-red-50 text-red-500 border border-red-200 rounded-full text-xs font-medium">
+                            タグなし
+                          </span>
+                        )
+                      }
+                    />
                   </td>
 
-                  {/* 代替画像 */}
+                  {/* 代替画像URL（インライン編集） */}
                   <td className="px-4 py-3">
-                    {card.alt_image_url ? (
-                      <span className="text-green-600 text-xs font-medium">あり</span>
-                    ) : (
-                      <span className="text-text-secondary text-xs">-</span>
-                    )}
+                    <InlineEditCell
+                      value={card.alt_image_url || ''}
+                      placeholder="URL を入力"
+                      onSave={(v) => updateCard(card.id, 'alt_image_url', v)}
+                      renderDisplay={(v) =>
+                        v ? (
+                          <span className="text-green-600 text-xs font-medium truncate block max-w-[160px]" title={v}>
+                            {v}
+                          </span>
+                        ) : (
+                          <span className="text-text-secondary text-xs italic">未設定</span>
+                        )
+                      }
+                    />
                   </td>
 
                   {/* レアリティ */}
