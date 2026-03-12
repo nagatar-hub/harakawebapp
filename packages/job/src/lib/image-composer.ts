@@ -40,6 +40,8 @@ export interface ComposePageParams {
   layoutAdjust?: { cardYDelta: number; priceYDelta: number };
   /** 行別の価格Y微調整: rowIndex → { priceHighYDelta, priceLowYDelta } */
   rowPriceAdjust?: Record<number, { priceHighYDelta?: number; priceLowYDelta?: number }>;
+  /** 行別のカードY微調整: rowIndex → delta px */
+  rowCardAdjust?: Record<number, number>;
   /** 空きスロットをカード裏面で埋める枚数 */
   totalSlots?: number;
 }
@@ -128,6 +130,7 @@ export async function composePage(params: ComposePageParams): Promise<Buffer> {
     skipPriceLow,
     layoutAdjust,
     rowPriceAdjust,
+    rowCardAdjust,
     totalSlots,
   } = params;
 
@@ -174,10 +177,11 @@ export async function composePage(params: ComposePageParams): Promise<Buffer> {
       cardBuffer = cardBackResized;
     }
 
+    const rowCardDelta = rowCardAdjust?.[rowIndex] ?? 0;
     composites.push({
       input: cardBuffer,
       left: x,
-      top: rowConfig.cardY + adjustCardY,
+      top: rowConfig.cardY + adjustCardY + rowCardDelta,
     });
 
     // ---- レアリティアイコン ----
@@ -195,8 +199,8 @@ export async function composePage(params: ComposePageParams): Promise<Buffer> {
 
         composites.push({
           input: iconBuffer,
-          left: x + (layout.rarityIconOffsetX ?? 0),
-          top: rowConfig.cardY + adjustCardY + (layout.rarityIconOffsetY ?? 0),
+          left: x + layout.cardWidth - layout.rarityIconWidth + (layout.rarityIconOffsetX ?? 0),
+          top: rowConfig.cardY + adjustCardY + rowCardDelta + (layout.rarityIconOffsetY ?? 0),
         });
       } catch {
         // アイコンリサイズ失敗は無視
@@ -256,10 +260,11 @@ export async function composePage(params: ComposePageParams): Promise<Buffer> {
     const adjustCardY = layoutAdjust?.cardYDelta ?? 0;
     const x = layout.startX + col * layout.colWidth;
 
+    const rowCardDelta2 = rowCardAdjust?.[rowIndex] ?? 0;
     composites.push({
       input: cardBackResized,
       left: x,
-      top: rowConfig.cardY + adjustCardY,
+      top: rowConfig.cardY + adjustCardY + rowCardDelta2,
     });
   }
 

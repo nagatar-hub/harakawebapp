@@ -102,16 +102,20 @@ export async function runGenerate() {
   // Run を再度 running に更新（generate フェーズ開始）
   await supabase.from('run').update({ status: 'running' }).eq('id', run.id);
 
+  // 日付ベースのストレージパス (YYYY/MM/DD)
+  const today = new Date();
+  const datePath = `${today.getFullYear()}/${String(today.getMonth() + 1).padStart(2, '0')}/${String(today.getDate()).padStart(2, '0')}`;
+
   try {
-    // ---- 1.5. 過去の生成データをクリーンアップ ----
-    console.log('[generate] 過去データクリーンアップ中...');
+    // ---- 1.5. 同日分の生成データをクリーンアップ ----
+    console.log('[generate] 同日分データクリーンアップ中...');
     // generated_page + spectre prepared_card を削除
     await supabase.from('generated_page').delete().eq('run_id', run.id);
     await supabase.from('prepared_card').delete().eq('run_id', run.id).eq('source', 'spectre');
 
-    // Storage の過去画像を削除（generated/{run_id}/ 配下）
+    // Storage の同日画像を削除（generated/YYYY/MM/DD/{franchise}/ 配下）
     for (const folder of ['Pokemon', 'ONEPIECE', 'YU-GI-OH']) {
-      const prefix = `generated/${run.id}/${folder}`;
+      const prefix = `generated/${datePath}/${folder}`;
       const { data: files } = await supabase.storage.from('haraka-images').list(prefix);
       if (files && files.length > 0) {
         const paths = files.map(f => `${prefix}/${f.name}`);
@@ -151,8 +155,9 @@ export async function runGenerate() {
 
     // ---- 4. franchise ごとにページ生成 ----
     let totalPages = 0;
-    const today = new Date();
     const dateText = `${String(today.getMonth() + 1).padStart(2, '0')}/${String(today.getDate()).padStart(2, '0')}`;
+    let rarityIconMap: Map<string, string> | null = null; // レアリティ名→Drive ID
+    const rarityIconCache = new Map<string, Buffer>(); // レアリティ名→Buffer（フランチャイズ跨ぎキャッシュ）
 
     for (const franchise of FRANCHISES) {
       console.log(`[generate] === ${franchise} ===`);
@@ -274,20 +279,52 @@ export async function runGenerate() {
         }
       }
 
-      // 4f. レアリティアイコンダウンロード
+      // 4f. レアリティアイコンダウンロード（RarityIcons シートから）
       const rarityIconBuffers = new Map<string, Buffer>();
-      if (profile.rarity_icons) {
-        console.log(`[generate]   レアリティアイコンダウンロード中...`);
-        for (const [, driveId] of Object.entries(profile.rarity_icons)) {
-          if (driveId && !rarityIconBuffers.has(driveId)) {
-            try {
-              const buf = await downloadDriveFile(accessToken, driveId);
-              rarityIconBuffers.set(driveId, buf);
-            } catch {
-              console.log(`[generate]     アイコンダウンロード失敗: ${driveId}`);
-            }
+      if (!rarityIconMap) {
+        // 初回のみシートを読む（全フランチャイズ共通）
+        try {
+          const iconRows = await fetchSheetValues({
+            accessToken,
+            spreadsheetId: harakaDbSpreadsheetId,
+            range: 'RarityIcons!A2:B100',
+          });
+          rarityIconMap = new Map<string, string>();
+          for (const row of iconRows) {
+            const name = row[0]?.trim();
+            const driveId = row[1]?.trim();
+            if (name && driveId) rarityIconMap.set(name, driveId);
           }
+          console.log(`[generate] RarityIcons シート読込: ${rarityIconMap.size}件`);
+        } catch (e) {
+          console.log(`[generate] RarityIcons シート読込失敗:`, e);
+          rarityIconMap = new Map();
         }
+      }
+      // このフランチャイズのカードが使うレアリティのみダウンロード
+      const neededRarities = new Set(cards.map(c => c.rarity_icon_url).filter(Boolean) as string[]);
+      for (const rarityName of neededRarities) {
+        if (rarityIconBuffers.has(rarityName)) continue;
+        // グローバルキャッシュにあればそこから
+        if (rarityIconCache.has(rarityName)) {
+          rarityIconBuffers.set(rarityName, rarityIconCache.get(rarityName)!);
+          continue;
+        }
+        const driveId = rarityIconMap.get(rarityName);
+        if (!driveId) {
+          console.log(`[generate]     レアリティアイコン未登録: ${rarityName}`);
+          continue;
+        }
+        try {
+          const buf = await downloadDriveFile(accessToken, driveId);
+          rarityIconBuffers.set(rarityName, buf);
+          rarityIconCache.set(rarityName, buf);
+        } catch {
+          console.log(`[generate]     アイコンダウンロード失敗: ${rarityName} (${driveId})`);
+        }
+      }
+      if (neededRarities.size > 0) {
+        console.log(`[generate]   レアリティアイコン: ${rarityIconBuffers.size}/${neededRarities.size}種ダウンロード`);
       }
 
       // 4g. 各ページの画像を生成
@@ -329,13 +366,17 @@ export async function runGenerate() {
           ? { cardYDelta: 4, priceYDelta: 0 }
           : { cardYDelta: -2, priceYDelta: 3 }; // Pokemon / ONE PIECE
 
-        // 行別の価格Y微調整（Pokemon）
-        const rowPriceAdjust = franchise === 'Pokemon'
-          ? {
-              1: { priceLowYDelta: 5 },                         // 2段目
-              3: { priceHighYDelta: 3, priceLowYDelta: 1.5 },   // 4段目
-              4: { priceLowYDelta: 7 },                          // 5段目(最下段)
-            } as Record<number, { priceHighYDelta?: number; priceLowYDelta?: number }>
+        // 行別の価格Y微調整（全フランチャイズ共通）
+        const rowPriceAdjust: Record<number, { priceHighYDelta?: number; priceLowYDelta?: number }> = {
+          1: { priceHighYDelta: 4, priceLowYDelta: 5 },     // 2段目
+          2: { priceLowYDelta: 2 },                          // 3段目(中央)
+          3: { priceHighYDelta: 3, priceLowYDelta: 1.5 },   // 4段目
+          4: { priceHighYDelta: 4, priceLowYDelta: 3 },     // 5段目(最下段)
+        };
+
+        // 行別のカードY微調整（遊戯王のみ）
+        const rowCardAdjust = franchise === 'YU-GI-OH!'
+          ? { 1: 8, 2: 3, 3: 3, 4: 3 } as Record<number, number>
           : undefined;
 
         // 画像合成
@@ -352,6 +393,7 @@ export async function runGenerate() {
             skipPriceLow: isBOX,
             layoutAdjust,
             rowPriceAdjust,
+            rowCardAdjust,
             totalSlots: profile.total_slots,
           });
 
@@ -359,7 +401,7 @@ export async function runGenerate() {
           // キーは ASCII のみ許容 — ラベルはローマ字マップで変換してインデックスで一意性を担保
           const safeLabel = romanizeLabel(plan.label);
           const safeFranchise = franchise.replace(/[^a-zA-Z0-9._-]/g, '') || 'franchise';
-          const storageKey = `generated/${run.id}/${safeFranchise}/page_${pageIdx}_${safeLabel}.png`;
+          const storageKey = `generated/${datePath}/${safeFranchise}/page_${pageIdx}_${safeLabel}.png`;
 
           const { error: uploadError } = await supabase.storage
             .from('haraka-images')
