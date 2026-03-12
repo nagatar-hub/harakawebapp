@@ -124,6 +124,21 @@ export type GeneratedPageRow = {
   created_at: string;
 };
 
+export type DbCardRow = {
+  id: string;
+  franchise: string;
+  tag: string | null;
+  card_name: string;
+  grade: string | null;
+  list_no: string | null;
+  image_url: string | null;
+  alt_image_url: string | null;
+  rarity_icon: string | null;
+  sheet_row_number: number | null;
+  created_at: string;
+  updated_at: string;
+};
+
 export type Database = {
   public: {
     Tables: {
@@ -164,6 +179,14 @@ export type Database = {
           image_key?: string | null; image_url?: string | null; status?: PageStatus;
         };
         Update: Partial<Omit<GeneratedPageRow, 'id' | 'created_at'>>;
+        Relationships: [];
+      };
+      db_card: {
+        Row: DbCardRow;
+        Insert: Omit<DbCardRow, 'id' | 'created_at' | 'updated_at'> & {
+          id?: string; created_at?: string; updated_at?: string;
+        };
+        Update: Partial<Omit<DbCardRow, 'id' | 'created_at'>>;
         Relationships: [];
       };
     };

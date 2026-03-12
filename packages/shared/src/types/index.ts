@@ -1,3 +1,3 @@
-export type { Database, RunRow, RuleRow, AssetProfileRow, RawImportRow, PreparedCardRow, GeneratedPageRow, LayoutConfig, RowConfig, RunStatus, RuleMatchType, RuleBehavior, ImageStatus, CardSource, PageStatus } from './database.js';
+export type { Database, RunRow, RuleRow, AssetProfileRow, RawImportRow, PreparedCardRow, GeneratedPageRow, DbCardRow, LayoutConfig, RowConfig, RunStatus, RuleMatchType, RuleBehavior, ImageStatus, CardSource, PageStatus } from './database.js';
 export type { Franchise } from './franchise.js';
 export { FRANCHISES, FRANCHISE_JA, KECAK_SHEET_MAP } from './franchise.js';

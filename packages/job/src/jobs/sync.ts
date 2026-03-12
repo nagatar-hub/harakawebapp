@@ -5,7 +5,7 @@
  * 1. Run レコード作成
  * 2. OAuth credentials 取得
  * 3. KECAK スプレッドシートから 3 シート取得 → raw_import 保存
- * 4. Haraka DB スプレッドシートから 3 シート取得 → LookupMap 構築
+ * 4. Haraka DB スプレッドシートの DB タブから一括取得 → franchise 別 LookupMap 構築
  * 5. PreparedCard 変換 → prepared_card 保存
  * 6. Run 統計更新
  */
@@ -13,12 +13,13 @@
 import { createSupabaseClient } from '../lib/supabase.js';
 import { fetchSheetValues } from '../lib/google-sheets.js';
 import { getAccessToken } from '../lib/auth.js';
-import { batchInsert } from '../lib/batch.js';
+import { batchInsert, batchUpsert } from '../lib/batch.js';
 import { parseKecakRows } from '../lib/kecak-parser.js';
 import { buildLookupMap } from '../lib/db-lookup.js';
+import { buildDbCardRows } from '../lib/db-card-sync.js';
 import { prepareCards } from '../lib/prepare-cards.js';
 import type { Database, Franchise } from '@haraka/shared';
-import { FRANCHISES, KECAK_SHEET_MAP } from '@haraka/shared';
+import { FRANCHISES, KECAK_SHEET_MAP, DB_COLS } from '@haraka/shared';
 
 type RunRow = Database['public']['Tables']['run']['Row'];
 type RawImportRow = Database['public']['Tables']['raw_import']['Row'];
@@ -93,22 +94,41 @@ export async function runSync() {
     }).eq('id', run.id);
     console.log(`[sync] インポート完了: 合計 ${totalImported}件`);
 
-    // ---- 4. Haraka DB 照合用マップ構築 ----
+    // ---- 4. Haraka DB 照合用マップ構築（DBタブから一括取得） ----
     const lookupMaps = new Map<Franchise, ReturnType<typeof buildLookupMap>>();
 
+    console.log('[sync] Haraka DB 取得: DBタブ');
+    const allDbRows = await fetchSheetValues({
+      accessToken,
+      spreadsheetId: harakaDbSpreadsheetId,
+      range: 'DB',
+    });
+
+    const dbHeader = allDbRows[0] ?? [];
+    const dbDataRows = allDbRows.slice(1);
+
     for (const franchise of FRANCHISES) {
-      // Haraka DB のシート名はフランチャイズ名そのまま（英語）
-      console.log(`[sync] Haraka DB 取得: ${franchise}`);
+      // A列（FRANCHISE）でフィルタリング
+      const franchiseRows = dbDataRows.filter(
+        (row) => row[DB_COLS.FRANCHISE - 1] === franchise
+      );
 
-      const dbRows = await fetchSheetValues({
-        accessToken,
-        spreadsheetId: harakaDbSpreadsheetId,
-        range: `${franchise}`,
-      });
-
-      const lookupMap = buildLookupMap(dbRows);
+      // ヘッダ + フィルタ済み行でLookupMap構築
+      const lookupMap = buildLookupMap([dbHeader, ...franchiseRows]);
       lookupMaps.set(franchise, lookupMap);
-      console.log(`[sync]   → LookupMap 構築完了`);
+      console.log(`[sync]   → ${franchise}: ${franchiseRows.length}件 LookupMap 構築完了`);
+    }
+
+    // ---- 4.5. db_card テーブルへ upsert ----
+    const dbCardRows = buildDbCardRows(dbDataRows);
+    if (dbCardRows.length > 0) {
+      await batchUpsert(
+        supabase,
+        'db_card',
+        dbCardRows as unknown as Record<string, unknown>[],
+        'franchise,card_name,grade,list_no',
+      );
+      console.log(`[sync] db_card upsert 完了: ${dbCardRows.length}件`);
     }
 
     // ---- 5. PreparedCard 変換 + 保存 ----
