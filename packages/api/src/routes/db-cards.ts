@@ -12,7 +12,7 @@ dbCardRoutes.get('/db-cards', async (c) => {
 
   let query = supabase
     .from('db_card')
-    .select('id, franchise, tag, card_name, grade, list_no, image_url, alt_image_url, rarity_icon, sheet_row_number')
+    .select('id, franchise, tag, card_name, grade, list_no, image_url, alt_image_url, rarity_icon, sheet_row_number, image_status')
     .order('franchise')
     .order('card_name')
     .limit(2000);
@@ -22,8 +22,8 @@ dbCardRoutes.get('/db-cards', async (c) => {
   }
 
   if (tab === 'error') {
-    // エラー: tag が null OR image_url が null/空
-    query = query.or('tag.is.null,image_url.is.null');
+    // エラー: tag が null OR image_url が null OR image_status が dead
+    query = query.or('tag.is.null,image_url.is.null,image_status.eq.dead');
   }
 
   const { data, error } = await query;
@@ -50,14 +50,120 @@ dbCardRoutes.get('/db-cards/stats', async (c) => {
     total += fCount ?? 0;
   }
 
-  // エラー件数: tag IS NULL OR image_url IS NULL
+  // エラー件数: tag IS NULL OR image_url IS NULL OR image_status = 'dead'
   const { count: errCount } = await supabase
     .from('db_card')
     .select('*', { count: 'exact', head: true })
-    .or('tag.is.null,image_url.is.null');
+    .or('tag.is.null,image_url.is.null,image_status.eq.dead');
   errorCount = errCount ?? 0;
 
-  return c.json({ total, byFranchise, errorCount });
+  // dead link 件数
+  const { count: deadCount } = await supabase
+    .from('db_card')
+    .select('*', { count: 'exact', head: true })
+    .eq('image_status', 'dead');
+
+  return c.json({ total, byFranchise, errorCount, deadCount: deadCount ?? 0 });
+});
+
+/** フランチャイズ別タグ一覧 */
+dbCardRoutes.get('/db-cards/tags', async (c) => {
+  const supabase = createSupabaseClient();
+
+  const { data, error } = await supabase
+    .from('db_card')
+    .select('franchise, tag')
+    .not('tag', 'is', null)
+    .limit(2000);
+
+  if (error) return c.json({ error: error.message }, 500);
+
+  // フランチャイズ別にユニークなタグを集約
+  const byFranchise: Record<string, string[]> = {};
+  for (const row of data || []) {
+    if (!row.tag) continue;
+    if (!byFranchise[row.franchise]) byFranchise[row.franchise] = [];
+    if (!byFranchise[row.franchise].includes(row.tag)) {
+      byFranchise[row.franchise].push(row.tag);
+    }
+  }
+
+  // ソート
+  for (const f of Object.keys(byFranchise)) {
+    byFranchise[f].sort();
+  }
+
+  return c.json(byFranchise);
+});
+
+/** 画像URLヘルスチェック（バッチ） */
+dbCardRoutes.post('/db-cards/health-check', async (c) => {
+  const supabase = createSupabaseClient();
+
+  // image_url があるカードを全取得
+  const { data: cards, error } = await supabase
+    .from('db_card')
+    .select('id, image_url')
+    .not('image_url', 'is', null)
+    .limit(5000);
+
+  if (error) return c.json({ error: error.message }, 500);
+  if (!cards || cards.length === 0) return c.json({ checked: 0, ok: 0, dead: 0 });
+
+  let okCount = 0;
+  let deadCount = 0;
+
+  // 並列度を制限して HEAD リクエスト
+  const CONCURRENCY = 20;
+  const results: { id: string; status: 'ok' | 'dead' }[] = [];
+
+  for (let i = 0; i < cards.length; i += CONCURRENCY) {
+    const batch = cards.slice(i, i + CONCURRENCY);
+    const batchResults = await Promise.all(
+      batch.map(async (card) => {
+        try {
+          const controller = new AbortController();
+          const timeout = setTimeout(() => controller.abort(), 8000);
+          const res = await fetch(card.image_url!, {
+            method: 'HEAD',
+            signal: controller.signal,
+            redirect: 'follow',
+          });
+          clearTimeout(timeout);
+          const status = res.ok ? 'ok' as const : 'dead' as const;
+          return { id: card.id, status };
+        } catch {
+          return { id: card.id, status: 'dead' as const };
+        }
+      })
+    );
+    results.push(...batchResults);
+  }
+
+  // バッチで Supabase 更新
+  const okIds = results.filter((r) => r.status === 'ok').map((r) => r.id);
+  const deadIds = results.filter((r) => r.status === 'dead').map((r) => r.id);
+
+  if (okIds.length > 0) {
+    // 100件ずつ更新
+    for (let i = 0; i < okIds.length; i += 100) {
+      const chunk = okIds.slice(i, i + 100);
+      await supabase.from('db_card').update({ image_status: 'ok' }).in('id', chunk);
+    }
+    okCount = okIds.length;
+  }
+
+  if (deadIds.length > 0) {
+    for (let i = 0; i < deadIds.length; i += 100) {
+      const chunk = deadIds.slice(i, i + 100);
+      await supabase.from('db_card').update({ image_status: 'dead' }).in('id', chunk);
+    }
+    deadCount = deadIds.length;
+  }
+
+  console.log(`[health-check] 完了: ${cards.length}件チェック, ok=${okCount}, dead=${deadCount}`);
+
+  return c.json({ checked: cards.length, ok: okCount, dead: deadCount });
 });
 
 /** db_card 個別更新（tag / alt_image_url） + シート書き戻し */
