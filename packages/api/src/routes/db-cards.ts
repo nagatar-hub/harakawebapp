@@ -100,15 +100,25 @@ dbCardRoutes.get('/db-cards/tags', async (c) => {
 dbCardRoutes.post('/db-cards/health-check', async (c) => {
   const supabase = createSupabaseClient();
 
-  // image_url があるカードを全取得
-  const { data: cards, error } = await supabase
-    .from('db_card')
-    .select('id, image_url')
-    .not('image_url', 'is', null)
-    .limit(5000);
+  // image_url があるカードを全取得（Supabaseの1000件制限をページネーションで回避）
+  const allCards: { id: string; image_url: string }[] = [];
+  const PAGE_SIZE = 1000;
+  let offset = 0;
+  while (true) {
+    const { data: page, error } = await supabase
+      .from('db_card')
+      .select('id, image_url')
+      .not('image_url', 'is', null)
+      .range(offset, offset + PAGE_SIZE - 1);
+    if (error) return c.json({ error: error.message }, 500);
+    if (!page || page.length === 0) break;
+    allCards.push(...(page as { id: string; image_url: string }[]));
+    if (page.length < PAGE_SIZE) break;
+    offset += PAGE_SIZE;
+  }
 
-  if (error) return c.json({ error: error.message }, 500);
-  if (!cards || cards.length === 0) return c.json({ checked: 0, ok: 0, dead: 0 });
+  const cards = allCards;
+  if (cards.length === 0) return c.json({ checked: 0, ok: 0, dead: 0 });
 
   let okCount = 0;
   let deadCount = 0;
