@@ -123,28 +123,40 @@ dbCardRoutes.post('/db-cards/health-check', async (c) => {
   let okCount = 0;
   let deadCount = 0;
 
-  // 並列度を制限して HEAD リクエスト
+  // 並列度を制限して HEAD → GET フォールバックでチェック
   const CONCURRENCY = 20;
+  const browserHeaders = {
+    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+    Accept: 'image/webp,image/apng,image/*,*/*;q=0.8',
+  };
   const results: { id: string; status: 'ok' | 'dead' }[] = [];
 
   for (let i = 0; i < cards.length; i += CONCURRENCY) {
     const batch = cards.slice(i, i + CONCURRENCY);
     const batchResults = await Promise.all(
       batch.map(async (card) => {
+        const url = card.image_url!;
+        // HEAD で試行
         try {
-          const controller = new AbortController();
-          const timeout = setTimeout(() => controller.abort(), 8000);
-          const res = await fetch(card.image_url!, {
-            method: 'HEAD',
-            signal: controller.signal,
-            redirect: 'follow',
-          });
-          clearTimeout(timeout);
-          const status = res.ok ? 'ok' as const : 'dead' as const;
-          return { id: card.id, status };
-        } catch {
-          return { id: card.id, status: 'dead' as const };
-        }
+          const c1 = new AbortController();
+          const t1 = setTimeout(() => c1.abort(), 8000);
+          const r1 = await fetch(url, { method: 'HEAD', signal: c1.signal, redirect: 'follow', headers: browserHeaders });
+          clearTimeout(t1);
+          if (r1.ok) return { id: card.id, status: 'ok' as const };
+          // Cloudflare JS Challenge: URLは存在するがボット対策
+          if (r1.status === 403 && r1.headers.get('cf-mitigated') === 'challenge') return { id: card.id, status: 'ok' as const };
+          if (r1.status === 404 || r1.status === 410) return { id: card.id, status: 'dead' as const };
+        } catch { /* fallback */ }
+        // GET フォールバック
+        try {
+          const c2 = new AbortController();
+          const t2 = setTimeout(() => c2.abort(), 8000);
+          const r2 = await fetch(url, { method: 'GET', signal: c2.signal, redirect: 'follow', headers: { ...browserHeaders, Range: 'bytes=0-0' } });
+          clearTimeout(t2);
+          if (r2.ok || r2.status === 206) return { id: card.id, status: 'ok' as const };
+          if (r2.status === 403 && r2.headers.get('cf-mitigated') === 'challenge') return { id: card.id, status: 'ok' as const };
+        } catch { /* dead */ }
+        return { id: card.id, status: 'dead' as const };
       })
     );
     results.push(...batchResults);

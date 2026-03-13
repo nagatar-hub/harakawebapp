@@ -34,6 +34,17 @@ interface SheetValuesResponse {
   values?: string[][];
 }
 
+interface AppendValuesResponse {
+  spreadsheetId: string;
+  tableRange: string;
+  updates: {
+    updatedRange: string;
+    updatedRows: number;
+    updatedColumns: number;
+    updatedCells: number;
+  };
+}
+
 interface SheetErrorResponse {
   error: {
     code: number;
@@ -142,4 +153,58 @@ export async function fetchSheetValues(params: {
 
   const sheetData = data as SheetValuesResponse;
   return sheetData.values ?? [];
+}
+
+/**
+ * Google Sheets API でスプレッドシートに行を追加する。
+ *
+ * values.append エンドポイントを呼び出し、指定範囲の末尾に行を追加する。
+ * Haraka DB シートへのタグ書き戻しに使用。
+ *
+ * @param params.accessToken    - 有効な OAuth access token
+ * @param params.spreadsheetId  - Google スプレッドシートの ID
+ * @param params.range          - A1 記法のシート範囲（例: "Pokemon!A:H"）
+ * @param params.values         - 追加する行データの 2D 文字列配列
+ * @returns 追加された行数
+ * @throws API 呼び出しに失敗した場合
+ */
+export async function appendSheetValues(params: {
+  accessToken: string;
+  spreadsheetId: string;
+  range: string;
+  values: string[][];
+}): Promise<number> {
+  const encodedRange = encodeURIComponent(params.range);
+  const url = `${GOOGLE_SHEETS_API_BASE}/${params.spreadsheetId}/values/${encodedRange}:append?valueInputOption=RAW&insertDataOption=INSERT_ROWS`;
+
+  let response: Response;
+  try {
+    response = await fetch(url, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${params.accessToken}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        range: params.range,
+        majorDimension: 'ROWS',
+        values: params.values,
+      }),
+    });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    throw new Error(`Google Sheets API への書き込みネットワークエラー: ${message}`);
+  }
+
+  const data: unknown = await response.json();
+
+  if (!response.ok) {
+    const errorData = data as SheetErrorResponse;
+    throw new Error(
+      `スプレッドシートへの書き込みに失敗しました (HTTP ${errorData.error.code}): ${errorData.error.message}`
+    );
+  }
+
+  const appendData = data as AppendValuesResponse;
+  return appendData.updates?.updatedRows ?? 0;
 }

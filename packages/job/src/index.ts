@@ -1,6 +1,7 @@
 import { createSupabaseClient } from './lib/supabase.js';
 import { runSync } from './jobs/sync.js';
 import { runGenerate } from './jobs/generate.js';
+import { runRegeneratePage } from './jobs/regenerate-page.js';
 
 async function main() {
   const jobName = process.env.JOB_NAME || 'healthcheck';
@@ -13,6 +14,9 @@ async function main() {
         break;
       case 'generate':
         await runGenerate();
+        break;
+      case 'regenerate-page':
+        await runRegeneratePage();
         break;
       case 'healthcheck':
         await runHealthcheck();

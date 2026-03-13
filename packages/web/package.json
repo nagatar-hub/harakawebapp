@@ -11,6 +11,9 @@
     "test:watch": "jest --watch"
   },
   "dependencies": {
+    "@dnd-kit/core": "^6.3.1",
+    "@dnd-kit/sortable": "^10.0.0",
+    "@dnd-kit/utilities": "^3.2.2",
     "@haraka/shared": "*",
     "@supabase/ssr": "^0.6.0",
     "@supabase/supabase-js": "^2.49.0",

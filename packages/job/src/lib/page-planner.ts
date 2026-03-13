@@ -17,6 +17,20 @@
 
 import type { PreparedCardRow, RuleRow } from '@haraka/shared';
 
+/** 数値を丸数字に変換（1→①, 2→②, ...20→⑳） */
+const CIRCLED_NUMBERS = '①②③④⑤⑥⑦⑧⑨⑩⑪⑫⑬⑭⑮⑯⑰⑱⑲⑳';
+function toCircledNumber(n: number): string {
+  if (n >= 1 && n <= 20) return CIRCLED_NUMBERS[n - 1];
+  return `-${n}`;
+}
+
+/** タグからメインカテゴリを抽出（"TAG/SA" → "TAG", "V/CSR" → "V"） */
+function mainTag(tag: string | null): string {
+  if (!tag) return '__none__';
+  const slash = tag.indexOf('/');
+  return slash >= 0 ? tag.slice(0, slash) : tag;
+}
+
 export type PagePlan = {
   /** ページラベル（"TOP", "リザードン", "general-1" 等） */
   label: string;
@@ -88,12 +102,12 @@ function splitIntoGroupedPages(
 ): PagePlan[] {
   if (cards.length === 0) return [];
 
-  // 1. タグでグルーピング & 各グループを price_high 降順ソート
+  // 1. メインタグ（"/"の前）でグルーピング & 各グループを price_high 降順ソート
   const tagGroups = new Map<string, PreparedCardRow[]>();
   for (const card of cards) {
-    const tag = card.tag || '__none__';
-    if (!tagGroups.has(tag)) tagGroups.set(tag, []);
-    tagGroups.get(tag)!.push(card);
+    const key = mainTag(card.tag);
+    if (!tagGroups.has(key)) tagGroups.set(key, []);
+    tagGroups.get(key)!.push(card);
   }
   for (const group of tagGroups.values()) {
     group.sort((a, b) => (b.price_high ?? 0) - (a.price_high ?? 0));
@@ -134,29 +148,67 @@ function splitIntoGroupedPages(
     }
   }
 
-  // 3. 各ビン内でグループを最高価格順に再配置
+  // 3. 各ビン内をメインタグ→サブタグ→価格順に再配置
+  //    同一メインタグのサブタグは連続配置、各サブタグ内は price_high 降順
   for (const bin of bins) {
+    // フルタグでグループ化
     const sub = new Map<string, PreparedCardRow[]>();
     for (const card of bin) {
       const tag = card.tag || '__none__';
       if (!sub.has(tag)) sub.set(tag, []);
       sub.get(tag)!.push(card);
     }
-    const sorted = [...sub.values()].sort(
-      (a, b) => (b[0]?.price_high ?? 0) - (a[0]?.price_high ?? 0),
-    );
+    // 各サブタグ内は price_high 降順
+    for (const g of sub.values()) {
+      g.sort((a, b) => (b.price_high ?? 0) - (a.price_high ?? 0));
+    }
+
+    // メインタグでまとめ、メインタグ間は最高価格順
+    const mainGroups = new Map<string, { tag: string; cards: PreparedCardRow[] }[]>();
+    for (const [tag, cards] of sub) {
+      const main = mainTag(cards[0]?.tag ?? null);
+      if (!mainGroups.has(main)) mainGroups.set(main, []);
+      mainGroups.get(main)!.push({ tag, cards });
+    }
+
+    // メインタグ内のサブタグは最高価格順
+    for (const subs of mainGroups.values()) {
+      subs.sort((a, b) => (b.cards[0]?.price_high ?? 0) - (a.cards[0]?.price_high ?? 0));
+    }
+
+    // メインタグ間は最高価格順
+    const sortedMains = [...mainGroups.values()].sort((a, b) => {
+      const aMax = Math.max(...a.map(s => s.cards[0]?.price_high ?? 0));
+      const bMax = Math.max(...b.map(s => s.cards[0]?.price_high ?? 0));
+      return bMax - aMax;
+    });
+
     bin.length = 0;
-    for (const g of sorted) bin.push(...g);
+    for (const subs of sortedMains) {
+      for (const { cards } of subs) {
+        bin.push(...cards);
+      }
+    }
   }
 
   // 4. ページを最高価格順でソート
   bins.sort((a, b) => (b[0]?.price_high ?? 0) - (a[0]?.price_high ?? 0));
 
-  // 5. PagePlan 変換（ラベルは呼び出し側で設定）
-  return bins.map((binCards) => ({
-    label: '',
-    cardIds: binCards.map(c => c.id),
-  }));
+  // 5. PagePlan 変換（ビン内の支配的メインタグをラベルに設定）
+  return bins.map((binCards) => {
+    // メインタグの出現頻度をカウントし、最多をラベルに
+    const tagCounts = new Map<string, number>();
+    for (const card of binCards) {
+      const key = mainTag(card.tag);
+      tagCounts.set(key, (tagCounts.get(key) || 0) + 1);
+    }
+    const dominant = [...tagCounts.entries()]
+      .sort((a, b) => b[1] - a[1])[0]?.[0] || '';
+    return {
+      label: dominant === '__none__' ? '' : dominant,
+      cardIds: binCards.map(c => c.id),
+    };
+  });
 }
 
 /**
@@ -225,9 +277,29 @@ export function planPages(
   const remainingCards = Array.from(remaining).map(id => cardById.get(id)!);
   if (remainingCards.length > 0) {
     const generalPages = splitIntoGroupedPages(remainingCards, totalSlots);
-    generalPages.forEach((page, index) => {
-      page.label = `general-${index + 1}`;
-    });
+
+    // 重複ラベルに丸数字を付ける
+    const labelCounts = new Map<string, number>();
+    for (const page of generalPages) {
+      labelCounts.set(page.label, (labelCounts.get(page.label) || 0) + 1);
+    }
+    const labelSeen = new Map<string, number>();
+    for (const page of generalPages) {
+      // タグなしカードはフォールバック名
+      if (!page.label) {
+        const idx = (labelSeen.get('', ) || 0) + 1;
+        labelSeen.set('', idx);
+        page.label = `その他${labelCounts.get('') === 1 ? '' : toCircledNumber(idx)}`;
+        continue;
+      }
+      const total = labelCounts.get(page.label) || 1;
+      if (total > 1) {
+        const seen = (labelSeen.get(page.label) || 0) + 1;
+        labelSeen.set(page.label, seen);
+        page.label = `${page.label}${toCircledNumber(seen)}`;
+      }
+    }
+
     pages.push(...generalPages);
   }
 

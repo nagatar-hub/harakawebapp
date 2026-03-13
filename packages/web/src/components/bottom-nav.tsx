@@ -8,6 +8,7 @@ const NAV_ITEMS = [
   { href: '/gallery', label: 'ギャラリー', icon: GalleryIcon },
   { href: '/db', label: 'DB', icon: DbIcon },
   { href: '/runs', label: '実行', icon: RunIcon },
+  { href: '/post', label: '投稿', icon: PostIcon },
 ];
 
 export function BottomNav() {
@@ -72,6 +73,15 @@ function RunIcon({ active }: { active: boolean }) {
   return (
     <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={active ? 2.2 : 1.8} strokeLinecap="round" strokeLinejoin="round">
       <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" />
+    </svg>
+  );
+}
+
+function PostIcon({ active }: { active: boolean }) {
+  return (
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={active ? 2.2 : 1.8} strokeLinecap="round" strokeLinejoin="round">
+      <path d="M4 4l11.733 16h4.267l-11.733 -16z" />
+      <path d="M4 20l6.768 -6.768m2.46 -2.46l6.772 -6.772" />
     </svg>
   );
 }

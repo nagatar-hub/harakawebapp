@@ -41,11 +41,11 @@ async function getAccessToken(): Promise<string> {
   });
 
   if (!response.ok) {
-    const data = await response.json();
+    const data = await response.json() as { error?: string };
     throw new Error(`Access token取得失敗: ${data.error}`);
   }
 
-  const data = await response.json();
+  const data = await response.json() as { access_token: string };
   return data.access_token;
 }
 
@@ -102,7 +102,7 @@ export async function appendTagToHarakaDB(card: {
   });
 
   if (!response.ok) {
-    const data = await response.json();
+    const data = await response.json() as { error?: { message?: string } };
     throw new Error(`シート書き込み失敗 (${response.status}): ${data.error?.message || 'unknown'}`);
   }
 
@@ -168,7 +168,7 @@ export async function updateDbSheetCell(
   });
 
   if (!response.ok) {
-    const data = await response.json();
+    const data = await response.json() as { error?: { message?: string } };
     throw new Error(`シートセル更新失敗 (${response.status}): ${data.error?.message || 'unknown'}`);
   }
 

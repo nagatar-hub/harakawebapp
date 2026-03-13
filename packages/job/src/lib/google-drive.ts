@@ -41,9 +41,12 @@ export async function downloadImage(
 ): Promise<Buffer | null> {
   try {
     if (urlOrDriveId.startsWith('http://') || urlOrDriveId.startsWith('https://')) {
-      // 通常の HTTP(S) URL
+      // 通常の HTTP(S) URL（ブラウザ UA で Cloudflare 等のボット対策に対応）
       const res = await fetch(urlOrDriveId, {
-        headers: { 'User-Agent': 'Haraka-Job/1.0' },
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+          Accept: 'image/webp,image/apng,image/*,*/*;q=0.8',
+        },
       });
       if (!res.ok) return null;
       const arrayBuffer = await res.arrayBuffer();
