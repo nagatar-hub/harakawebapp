@@ -55,8 +55,8 @@ export function parseSpectreRows(
     const spectreName = getCell(row, SPECTRE_MAP_COLS.SPECTRE_NAME);
     if (!spectreName || spectreName.trim() === '') continue;
 
-    const priceHigh = safeNumber(getCell(row, SPECTRE_MAP_COLS.BUY_PRICE)) ?? 0;
-    const priceLow = priceHigh > 0 ? calculateBuyPriceLow(priceHigh, franchise) : 0;
+    const priceHigh = safeNumber(getCell(row, SPECTRE_MAP_COLS.BUY_PRICE));
+    const priceLow = priceHigh != null && priceHigh > 0 ? calculateBuyPriceLow(priceHigh, franchise) : null;
 
     result.push({
       run_id: runId,

@@ -18,6 +18,7 @@ const ROW_CHARIZARD = ['TOP', 'リザードンex SAR', '¥35,000', 'https://img/
 const ROW_PIKACHU = ['TOP', 'ピカチュウ AR', '¥12,000', 'https://img/pika.jpg', 'ピカチュウ', 'PSA10', '58/102', '10000'];
 const ROW_EMPTY_NAME = ['', '', '', '', '', '', '', ''];
 const ROW_WITH_YEN = ['BOX', 'ミュウex', '¥8,000', 'https://img/mew.jpg', 'ミュウex', 'PSA9', '151/165', '¥7,000'];
+const ROW_NO_PRICE = ['TOP', 'フシギバナex', '¥5,000', 'https://img/venu.jpg', 'フシギバナex', 'PSA10', '3/102', ''];
 
 describe('parseSpectreRows', () => {
   const franchise: Franchise = 'Pokemon';
@@ -132,6 +133,13 @@ describe('parseSpectreRows', () => {
     const rows = [HEADER, nfdRow];
     const result = parseSpectreRows(rows, franchise, RUN_ID);
     expect(result[0].card_name).toBe('リザードン'.normalize('NFC'));
+  });
+
+  it('BUY_PRICE が空の場合 price_high / price_low が null になる', () => {
+    const rows = [HEADER, ROW_NO_PRICE];
+    const result = parseSpectreRows(rows, franchise, RUN_ID);
+    expect(result[0].price_high).toBeNull();
+    expect(result[0].price_low).toBeNull();
   });
 
   it('YU-GI-OH! の franchise でも正しく動作する', () => {
