@@ -348,6 +348,11 @@ export function PageDetailModal({
   );
 
   useEffect(() => {
+    document.body.style.overflow = 'hidden';
+    return () => { document.body.style.overflow = ''; };
+  }, []);
+
+  useEffect(() => {
     loadPageDetail();
   }, [pageId]);
 

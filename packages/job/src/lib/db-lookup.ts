@@ -79,7 +79,7 @@ export function buildLookupMap(dbRows: string[][]): LookupMap {
     const grade = normalizeKey(getCell(row, DB_COLS.TYPE));
     const listNo = normalizeKey(getCell(row, DB_COLS.CARD_NO));
     const tag = getCell(row, DB_COLS.GROUP);
-    const imageRaw = getCell(row, DB_COLS.IMAGE);
+    const imageRaw = getCell(row, DB_COLS.ALT_IMAGE);
     const rarityIconRaw = getCell(row, DB_COLS.RARITY_ICON);
 
     const result: LookupResult = {

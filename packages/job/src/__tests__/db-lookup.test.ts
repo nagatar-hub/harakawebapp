@@ -7,20 +7,20 @@
 import { buildLookupMap, lookupCard } from '../lib/db-lookup';
 
 // DB_COLS の定義（1-indexed → array index = value - 1）
-// GROUP: 1 (idx 0), CARD_NAME: 2 (idx 1), TYPE: 3 (idx 2),
-// CARD_NO: 4 (idx 3), IMAGE: 5 (idx 4), RARITY_ICON: 6 (idx 5),
-// PRICE_HIGH: 7 (idx 6), PRICE_LOW: 8 (idx 7)
+// FRANCHISE: 1 (idx 0), GROUP: 2 (idx 1), CARD_NAME: 3 (idx 2),
+// TYPE: 4 (idx 3), CARD_NO: 5 (idx 4), IMAGE: 6 (idx 5),
+// ALT_IMAGE: 7 (idx 6), RARITY_ICON: 8 (idx 7)
 
 // ヘッダ行
-const HEADER = ['グループ', 'ガチャ選択肢名称', '種別', 'list_no', '画像', 'レアリティアイコン', '買取上限', '買取下限'];
+const HEADER = ['タイトル', 'タグ', 'ガチャ選択肢名称', '種別', 'list_no', '画像', '代替画像', 'レアリティアイコン'];
 
 // データ行
-// [group, card_name, type/grade, card_no, image, rarity_icon, price_high, price_low]
-const ROW_CHARIZARD = ['タグ-リザードン', 'リザードン', 'PSA10', '4/102', 'https://img/char.jpg', '1', '¥50,000', '44000'];
-const ROW_CHARIZARD_PSA9 = ['タグ-リザードン', 'リザードン', 'PSA9', '4/102', 'https://img/char9.jpg', '1', '¥30,000', '26000'];
-const ROW_PIKACHU = ['タグ-ピカチュウ', 'ピカチュウ', 'PSA10', '58/102', 'https://img/pika.jpg', '2', '¥10,000', '8800'];
-const ROW_BLACK_MAGE = ['タグ-BM', 'ブラック・マジシャン', 'PSA10', 'LOB-001', 'https://img/bm.jpg', '3', '¥100,000', '88000'];
-const ROW_NO_ICON = ['タグ-フシギダネ', 'フシギダネ', 'PSA8', '1/102', 'https://img/bulb.jpg', '', '¥5,000', '4400'];
+// [franchise, group, card_name, type/grade, card_no, image, alt_image, rarity_icon]
+const ROW_CHARIZARD = ['Pokemon', 'タグ-リザードン', 'リザードン', 'PSA10', '4/102', 'https://primary/char.jpg', 'https://img/char.jpg', '1'];
+const ROW_CHARIZARD_PSA9 = ['Pokemon', 'タグ-リザードン', 'リザードン', 'PSA9', '4/102', 'https://primary/char9.jpg', 'https://img/char9.jpg', '1'];
+const ROW_PIKACHU = ['Pokemon', 'タグ-ピカチュウ', 'ピカチュウ', 'PSA10', '58/102', 'https://primary/pika.jpg', 'https://img/pika.jpg', '2'];
+const ROW_BLACK_MAGE = ['YU-GI-OH!', 'タグ-BM', 'ブラック・マジシャン', 'PSA10', 'LOB-001', 'https://primary/bm.jpg', 'https://img/bm.jpg', '3'];
+const ROW_NO_ICON = ['Pokemon', 'タグ-フシギダネ', 'フシギダネ', 'PSA8', '1/102', 'https://primary/bulb.jpg', 'https://img/bulb.jpg', ''];
 
 describe('buildLookupMap', () => {
   it('ヘッダ行（1行目）をスキップする', () => {
@@ -32,7 +32,7 @@ describe('buildLookupMap', () => {
   });
 
   it('card_name が空の行をスキップする', () => {
-    const emptyNameRow = ['タグ', '', 'PSA10', '1/102', 'https://img/test.jpg', '', '¥1,000', '800'];
+    const emptyNameRow = ['Pokemon', 'タグ', '', 'PSA10', '1/102', 'https://primary/test.jpg', 'https://img/test.jpg', ''];
     const rows = [HEADER, emptyNameRow, ROW_CHARIZARD];
     const map = buildLookupMap(rows);
     // emptyNameRow は無視されて、1件のみ登録される
@@ -62,7 +62,7 @@ describe('lookupCard - exact（3段階: card_name + grade + list_no）', () => {
     expect(result?.tag).toBe('タグ-リザードン');
   });
 
-  it('完全一致で imageUrl を正しく返す', () => {
+  it('完全一致で imageUrl（ALT_IMAGE列）を正しく返す', () => {
     const rows = [HEADER, ROW_CHARIZARD];
     const map = buildLookupMap(rows);
     const result = lookupCard(map, { card_name: 'リザードン', grade: 'PSA10', list_no: '4/102' });
@@ -83,9 +83,9 @@ describe('lookupCard - exact（3段階: card_name + grade + list_no）', () => {
     expect(result?.rarityIcon).toBeNull();
   });
 
-  it('image が空の場合は null を返す', () => {
-    const noImageRow = ['タグ', 'テスト', 'PSA10', '1/1', '', '', '¥1,000', '800'];
-    const rows = [HEADER, noImageRow];
+  it('alt_image が空の場合は null を返す', () => {
+    const noAltImageRow = ['Pokemon', 'タグ', 'テスト', 'PSA10', '1/1', 'https://primary/test.jpg', '', ''];
+    const rows = [HEADER, noAltImageRow];
     const map = buildLookupMap(rows);
     const result = lookupCard(map, { card_name: 'テスト', grade: 'PSA10', list_no: '1/1' });
     expect(result?.imageUrl).toBeNull();

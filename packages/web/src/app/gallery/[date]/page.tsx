@@ -111,6 +111,11 @@ export default function GalleryDatePage() {
   async function handleBulkDownload() {
     const list = buildDownloadList(allFiltered);
     if (list.length === 0) return;
+    // 最新runの実行時刻を取得
+    const latestRun = runGroups[0];
+    const runTime = latestRun ? formatTime(latestRun[1].started_at) : '';
+    const ok = window.confirm(`${date} ${runTime} の実行分（${list.length}枚）をダウンロードします。\nよろしいですか？`);
+    if (!ok) return;
     setDownloading(true);
     setDlProgress({ current: 0, total: list.length });
     try {
@@ -124,6 +129,8 @@ export default function GalleryDatePage() {
     const selected = allFiltered.filter(p => selectedIds.has(p.id));
     const list = buildDownloadList(selected);
     if (list.length === 0) return;
+    const ok = window.confirm(`選択した${list.length}枚をダウンロードします。\nよろしいですか？`);
+    if (!ok) return;
     setDownloading(true);
     setDlProgress({ current: 0, total: list.length });
     try {
