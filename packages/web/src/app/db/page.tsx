@@ -273,7 +273,7 @@ export default function DbPage() {
     <div>
       <div className="flex items-center justify-between mb-14">
         <div>
-          <h1 className="text-4xl font-bold text-text-primary tracking-tight">DB管理</h1>
+          <h1 className="page-title text-4xl text-text-primary">DB管理</h1>
           <p className="text-base text-text-secondary mt-3">
             全カード: <span className="font-bold text-text-primary">{stats?.total ?? '-'}件</span>
             {stats?.errorCount ? (

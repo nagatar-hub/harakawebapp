@@ -5,6 +5,8 @@ import { useParams } from 'next/navigation';
 import { FranchiseTabs } from '@/components/franchise-tabs';
 import { ImageModal } from '@/components/image-modal';
 import { PageDetailModal } from './page-detail-modal';
+import { downloadImagesAsZip } from '@/lib/download-images';
+import type { DownloadableImage } from '@/lib/download-images';
 
 type PageImage = {
   id: string;
@@ -35,6 +37,10 @@ export default function GalleryDatePage() {
   const [modalIndex, setModalIndex] = useState<number | null>(null);
   const [collapsedRuns, setCollapsedRuns] = useState<Set<string>>(new Set());
   const [detailPageId, setDetailPageId] = useState<string | null>(null);
+  const [selectMode, setSelectMode] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [downloading, setDownloading] = useState(false);
+  const [dlProgress, setDlProgress] = useState({ current: 0, total: 0 });
 
   useEffect(() => {
     async function load() {
@@ -93,13 +99,110 @@ export default function GalleryDatePage() {
   // 全filtered画像のフラット配列（モーダル用）
   const allFiltered = runGroups.flatMap(([, g]) => g.pages);
 
+  function buildDownloadList(pages: PageImage[]): DownloadableImage[] {
+    return pages
+      .filter(p => p.image_url)
+      .map(p => ({
+        image_url: p.image_url!,
+        filename: `${p.franchise}_${p.page_label || `page-${p.page_index}`}.png`,
+      }));
+  }
+
+  async function handleBulkDownload() {
+    const list = buildDownloadList(allFiltered);
+    if (list.length === 0) return;
+    setDownloading(true);
+    setDlProgress({ current: 0, total: list.length });
+    try {
+      await downloadImagesAsZip(list, `haraka_${date}.zip`, (cur, total) => setDlProgress({ current: cur, total }));
+    } finally {
+      setDownloading(false);
+    }
+  }
+
+  async function handleSelectedDownload() {
+    const selected = allFiltered.filter(p => selectedIds.has(p.id));
+    const list = buildDownloadList(selected);
+    if (list.length === 0) return;
+    setDownloading(true);
+    setDlProgress({ current: 0, total: list.length });
+    try {
+      await downloadImagesAsZip(list, `haraka_${date}_selected.zip`, (cur, total) => setDlProgress({ current: cur, total }));
+    } finally {
+      setDownloading(false);
+      setSelectMode(false);
+      setSelectedIds(new Set());
+    }
+  }
+
+  function toggleSelect(id: string) {
+    setSelectedIds(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
   return (
     <div>
+      {/* Download progress overlay */}
+      {downloading && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 backdrop-blur-sm">
+          <div className="bg-card-bg border border-border-card rounded-2xl shadow-2xl p-8 w-80">
+            <p className="text-sm font-semibold text-text-primary mb-3">ダウンロード中...</p>
+            <div className="w-full bg-warm-100 rounded-full h-2 overflow-hidden mb-2">
+              <div
+                className="bg-text-primary h-2 rounded-full transition-all duration-300"
+                style={{ width: `${dlProgress.total > 0 ? Math.round((dlProgress.current / dlProgress.total) * 100) : 0}%` }}
+              />
+            </div>
+            <p className="text-xs text-text-secondary text-right">{dlProgress.current}/{dlProgress.total}</p>
+          </div>
+        </div>
+      )}
+
       <div className="flex items-center justify-between mb-14">
         <div>
-          <h1 className="text-4xl font-bold text-text-primary tracking-tight">{date}</h1>
+          <h1 className="page-title text-4xl text-text-primary">{date}</h1>
         </div>
-        <FranchiseTabs active={filter} onChange={setFilter} />
+        <div className="flex items-center gap-3">
+          <FranchiseTabs active={filter} onChange={setFilter} />
+          {!selectMode ? (
+            <>
+              <button
+                onClick={handleBulkDownload}
+                disabled={downloading || allFiltered.length === 0}
+                className="px-4 py-2 rounded-full text-sm font-semibold border border-border-card text-text-primary hover:bg-warm-100 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+              >
+                一括DL
+              </button>
+              <button
+                onClick={() => { setSelectMode(true); setSelectedIds(new Set()); }}
+                disabled={downloading || allFiltered.length === 0}
+                className="px-4 py-2 rounded-full text-sm font-semibold border border-border-card text-text-primary hover:bg-warm-100 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+              >
+                選択DL
+              </button>
+            </>
+          ) : (
+            <>
+              <button
+                onClick={handleSelectedDownload}
+                disabled={downloading || selectedIds.size === 0}
+                className="px-4 py-2 rounded-full text-sm font-semibold bg-text-primary text-white hover:bg-warm-800 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+              >
+                ダウンロード ({selectedIds.size}件)
+              </button>
+              <button
+                onClick={() => { setSelectMode(false); setSelectedIds(new Set()); }}
+                className="px-4 py-2 rounded-full text-sm border border-border-card text-text-secondary hover:bg-warm-50 transition-colors"
+              >
+                キャンセル
+              </button>
+            </>
+          )}
+        </div>
       </div>
 
       {loading ? (
@@ -155,9 +258,18 @@ export default function GalleryDatePage() {
                       </h2>
                       <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
                         {pages.map((page, i) => (
-                          <div key={page.id} className="bg-card-bg border border-border-card rounded-xl overflow-hidden hover:scale-[1.03] transition-transform duration-300">
+                          <div key={page.id} className={`bg-card-bg border rounded-xl overflow-hidden hover:scale-[1.03] transition-all duration-300 relative ${selectMode && selectedIds.has(page.id) ? 'border-text-primary ring-2 ring-text-primary/30' : 'border-border-card'}`}>
+                            {selectMode && (
+                              <button
+                                onClick={() => toggleSelect(page.id)}
+                                className="absolute top-2 left-2 z-10 w-6 h-6 rounded-md border-2 flex items-center justify-center transition-colors bg-white/80 backdrop-blur-sm"
+                                style={{ borderColor: selectedIds.has(page.id) ? 'var(--color-text-primary)' : '#ccc' }}
+                              >
+                                {selectedIds.has(page.id) && <span className="text-text-primary text-sm font-bold">✓</span>}
+                              </button>
+                            )}
                             <button
-                              onClick={() => setModalIndex(franchiseStart + i)}
+                              onClick={() => selectMode ? toggleSelect(page.id) : setModalIndex(franchiseStart + i)}
                               className="w-full text-left"
                             >
                               {page.image_url && (

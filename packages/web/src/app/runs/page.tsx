@@ -2,6 +2,8 @@
 
 import { useEffect, useState, useCallback, useRef } from 'react';
 import Link from 'next/link';
+import { downloadImagesAsZip } from '@/lib/download-images';
+import type { DownloadableImage } from '@/lib/download-images';
 
 type Run = {
   id: string;
@@ -102,6 +104,8 @@ export default function RunsPage() {
   const [generateConfirm, setGenerateConfirm] = useState<ExcludedCards | null>(null);
   const [generateConfirmChecked, setGenerateConfirmChecked] = useState(false);
   const [generateConfirmLoading, setGenerateConfirmLoading] = useState(false);
+  const [downloadingRunId, setDownloadingRunId] = useState<string | null>(null);
+  const [dlProgress, setDlProgress] = useState({ current: 0, total: 0 });
   const runsRef = useRef(runs);
   runsRef.current = runs;
   // 前回fetchで running だった run ID を記録
@@ -255,8 +259,45 @@ export default function RunsPage() {
     setDetailLoading(false);
   }
 
+  async function handleRunDownload(run: Run) {
+    const dateStr = new Date(run.started_at).toLocaleDateString('sv-SE', { timeZone: 'Asia/Tokyo' });
+    setDownloadingRunId(run.id);
+    setDlProgress({ current: 0, total: 0 });
+    try {
+      const res = await fetch(`${API_URL}/api/gallery/images?date=${dateStr}`);
+      if (!res.ok) return;
+      const pages: { id: string; franchise: string; page_label: string | null; page_index: number; image_url: string | null; run_id: string }[] = await res.json();
+      const runPages = pages.filter(p => p.run_id === run.id && p.image_url);
+      const list: DownloadableImage[] = runPages.map(p => ({
+        image_url: p.image_url!,
+        filename: `${p.franchise}_${p.page_label || `page-${p.page_index}`}.png`,
+      }));
+      if (list.length === 0) return;
+      setDlProgress({ current: 0, total: list.length });
+      await downloadImagesAsZip(list, `haraka_${dateStr}.zip`, (cur, total) => setDlProgress({ current: cur, total }));
+    } finally {
+      setDownloadingRunId(null);
+    }
+  }
+
   return (
     <div>
+      {/* Download progress overlay */}
+      {downloadingRunId && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 backdrop-blur-sm">
+          <div className="bg-card-bg border border-border-card rounded-2xl shadow-2xl p-8 w-80">
+            <p className="text-sm font-semibold text-text-primary mb-3">ダウンロード中...</p>
+            <div className="w-full bg-warm-100 rounded-full h-2 overflow-hidden mb-2">
+              <div
+                className="bg-text-primary h-2 rounded-full transition-all duration-300"
+                style={{ width: `${dlProgress.total > 0 ? Math.round((dlProgress.current / dlProgress.total) * 100) : 0}%` }}
+              />
+            </div>
+            <p className="text-xs text-text-secondary text-right">{dlProgress.current}/{dlProgress.total}</p>
+          </div>
+        </div>
+      )}
+
       {/* Toast notifications */}
       {toasts.length > 0 && (
         <div className="fixed bottom-24 right-6 z-50 flex flex-col gap-3 max-w-md">
@@ -393,7 +434,7 @@ export default function RunsPage() {
 
       <div className="flex items-center justify-between mb-14">
         <div>
-          <h1 className="text-4xl font-bold text-text-primary tracking-tight">実行履歴</h1>
+          <h1 className="page-title text-4xl text-text-primary">実行履歴</h1>
         </div>
         <div className="flex gap-3">
           <button
@@ -525,13 +566,20 @@ export default function RunsPage() {
 
               {/* Gallery link for completed generate runs */}
               {run.generate_done_at && run.status === 'completed' && (
-                <div className="mt-4">
+                <div className="mt-4 flex gap-3">
                   <Link
                     href={`/gallery/${new Date(run.started_at).toLocaleDateString('sv-SE', { timeZone: 'Asia/Tokyo' })}`}
                     className="inline-flex items-center gap-1.5 text-sm px-4 py-2 rounded-full border border-border-card text-text-primary hover:bg-warm-100 transition-colors"
                   >
-                    🖼️ ギャラリーを見る →
+                    ギャラリーを見る →
                   </Link>
+                  <button
+                    onClick={() => handleRunDownload(run)}
+                    disabled={downloadingRunId !== null}
+                    className="inline-flex items-center gap-1.5 text-sm px-4 py-2 rounded-full border border-border-card text-text-primary hover:bg-warm-100 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                  >
+                    画像DL
+                  </button>
                 </div>
               )}
 

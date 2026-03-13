@@ -31,7 +31,7 @@ export function BottomNav() {
               }`}
             >
               <item.icon active={isActive} />
-              <span className={`tracking-wide ${isActive ? 'font-semibold' : ''}`}>{item.label}</span>
+              <span className={`tracking-wide ${isActive ? 'font-bold' : 'font-medium'}`}>{item.label}</span>
             </Link>
           );
         })}

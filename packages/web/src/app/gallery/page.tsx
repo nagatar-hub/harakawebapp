@@ -27,7 +27,7 @@ export default async function GalleryPage() {
   return (
     <div>
       <div className="mb-14">
-        <h1 className="text-4xl font-bold text-text-primary tracking-tight">ギャラリー</h1>
+        <h1 className="page-title text-4xl text-text-primary">ギャラリー</h1>
       </div>
 
       {dates.length === 0 ? (

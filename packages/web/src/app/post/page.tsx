@@ -32,7 +32,7 @@ const MENU_ITEMS = [
 export default function PostPage() {
   return (
     <div>
-      <h1 className="text-2xl font-bold mb-2">X投稿管理</h1>
+      <h1 className="page-title text-2xl text-text-primary mb-2">X投稿管理</h1>
       <p className="text-text-secondary text-sm mb-8">
         買取表画像をXにスレッド形式で投稿します。
       </p>

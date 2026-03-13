@@ -1,7 +1,7 @@
 @import "tailwindcss";
 
 @theme {
-  --font-display: "Yu Mincho", "Hiragino Mincho ProN", "Noto Serif JP", serif;
+  --font-display: "Noto Serif JP", "Yu Mincho", "Hiragino Mincho ProN", serif;
   --font-body: "Hiragino Sans", "Yu Gothic", "Meiryo", sans-serif;
   --color-warm-50: #faf7f2;
   --color-warm-100: #f4ede3;
@@ -30,4 +30,11 @@ body {
 
 ::selection {
   background: rgba(204, 120, 92, 0.5);
+}
+
+/* Page titles: stylish Mincho */
+.page-title {
+  font-family: var(--font-display);
+  font-weight: 900;
+  letter-spacing: 0.02em;
 }
