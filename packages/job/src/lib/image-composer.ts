@@ -51,7 +51,7 @@ export interface ComposePageParams {
 // ---------------------------------------------------------------------------
 
 /** SVG で使用するゴシック系フォントフォールバック（SVG属性内で使うため &quot; は不可） */
-const GOTHIC_FONT = 'Meiryo, Yu Gothic, Arial, sans-serif';
+const GOTHIC_FONT = 'Noto Sans CJK JP, Noto Sans JP, Meiryo, Yu Gothic, Arial, sans-serif';
 
 /**
  * 価格テキスト用 SVG Buffer を生成

@@ -1,9 +1,11 @@
 FROM node:20-slim
 WORKDIR /app
 
-# Sharp のネイティブビルド依存
+# Sharp のネイティブビルド依存 + 日本語フォント（SVG価格テキスト描画に必須）
 RUN apt-get update && \
-    apt-get install -y --no-install-recommends python3 make g++ && \
+    apt-get install -y --no-install-recommends python3 make g++ \
+    fontconfig fonts-noto-cjk && \
+    fc-cache -fv && \
     rm -rf /var/lib/apt/lists/*
 
 # package files だけ先にコピー（キャッシュ効率化）

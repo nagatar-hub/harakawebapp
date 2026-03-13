@@ -315,8 +315,12 @@ function SortableRow({
           <span className="text-xs text-red-500">dead</span>
         ) : card.image_status === 'fallback' ? (
           <span className="text-xs text-yellow-600">代替</span>
+        ) : card.image_status === 'unchecked' ? (
+          <span className="text-xs text-warm-400">未チェック</span>
         ) : card.alt_image_url ? (
           <span className="text-xs text-green-600">代替設定済</span>
+        ) : !card.image_url && !card.alt_image_url ? (
+          <span className="text-xs text-red-500">画像なし</span>
         ) : (
           <span className="text-xs text-text-secondary">OK</span>
         )}
