@@ -261,7 +261,7 @@ export async function runSync() {
       .from('prepared_card')
       .select('*', { count: 'exact', head: true })
       .eq('run_id', run.id)
-      .or('price_high.is.null,price_low.is.null');
+      .or('price_high.is.null,price_low.is.null,price_high.eq.0,price_low.eq.0');
 
     const totalPriceMissing = priceMissingCount ?? 0;
 
@@ -296,9 +296,9 @@ export async function runSync() {
       if (franchiseCards.length === 0) continue;
 
       // タグなし・価格未記入カードを除外
-      const validCards = franchiseCards.filter(c => c.tag && c.price_high != null && c.price_low != null);
+      const validCards = franchiseCards.filter(c => c.tag && c.price_high != null && c.price_high > 0 && c.price_low != null && c.price_low > 0);
       const untaggedCards = franchiseCards.filter(c => !c.tag);
-      const priceMissingCards = franchiseCards.filter(c => c.tag && (c.price_high == null || c.price_low == null));
+      const priceMissingCards = franchiseCards.filter(c => c.tag && (!c.price_high || !c.price_low));
 
       if (untaggedCards.length > 0) {
         console.warn(`[sync]   ${franchise}: タグ未設定 ${untaggedCards.length}件（除外）`);

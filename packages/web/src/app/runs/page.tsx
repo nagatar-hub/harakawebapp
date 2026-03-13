@@ -172,6 +172,7 @@ export default function RunsPage() {
 
   // running 状態が変わったらインターバルを再設定
   const hasRunning = runs.some(r => r.status === 'running');
+  const hasCompletedSync = runs.some(r => r.status === 'completed' && r.plan_done_at && !r.generate_done_at);
   useEffect(() => {
     const id = setInterval(fetchRuns, hasRunning ? 2000 : 10000);
     return () => clearInterval(id);
@@ -457,14 +458,15 @@ export default function RunsPage() {
           </button>
           <button
             onClick={() => handleGenerateClick()}
-            disabled={triggering !== null || hasRunning || generateConfirmLoading}
+            disabled={triggering !== null || hasRunning || generateConfirmLoading || !hasCompletedSync}
             className={`px-5 py-2.5 rounded-full text-sm font-semibold transition-all duration-100 select-none ${
               triggering === 'generate' || generateConfirmLoading
                 ? 'bg-blue-600 text-white scale-90 shadow-inner'
-                : triggering !== null || hasRunning
+                : triggering !== null || hasRunning || !hasCompletedSync
                   ? 'bg-text-primary/40 text-white/70 cursor-not-allowed'
                   : 'bg-text-primary text-white hover:bg-warm-800 active:scale-90 active:bg-warm-900 active:shadow-[inset_0_2px_8px_rgba(0,0,0,0.3)]'
             }`}
+            title={!hasCompletedSync ? '先に同期を実行してください' : undefined}
           >
             {triggering === 'generate' ? (
               <span className="flex items-center gap-2">
@@ -476,7 +478,7 @@ export default function RunsPage() {
                 <span className="inline-block w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
                 確認中...
               </span>
-            ) : hasRunning ? '実行中...' : '画像生成 →'}
+            ) : hasRunning ? '実行中...' : !hasCompletedSync ? '画像生成（同期が必要）' : '画像生成 →'}
           </button>
         </div>
       </div>
