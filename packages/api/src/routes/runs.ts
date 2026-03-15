@@ -67,6 +67,45 @@ runRoutes.post('/jobs/generate', async (c) => {
   }
 });
 
+/** ジョブ強制停止 */
+runRoutes.post('/runs/:id/abort', async (c) => {
+  const id = c.req.param('id');
+  const supabase = createSupabaseClient();
+
+  const { data: run, error } = await supabase
+    .from('run')
+    .select('id, status, process_pid')
+    .eq('id', id)
+    .single();
+
+  if (error || !run) {
+    return c.json({ error: 'Run not found' }, 404);
+  }
+  if (run.status !== 'running') {
+    return c.json({ error: 'Run is not running' }, 400);
+  }
+
+  // プロセスを SIGTERM で停止
+  if (run.process_pid) {
+    try {
+      process.kill(run.process_pid, 'SIGTERM');
+    } catch {
+      // プロセスが既に終了している場合は無視
+    }
+  }
+
+  // DB を aborted に更新（SIGTERM ハンドラが間に合わない場合のフォールバック）
+  await supabase.from('run').update({
+    status: 'aborted' as const,
+    aborted_at: new Date().toISOString(),
+    progress_current: 0,
+    progress_total: 0,
+    progress_message: null,
+  }).eq('id', id).eq('status', 'running');
+
+  return c.json({ status: 'aborted' });
+});
+
 /** 指定 run のタグなしカード一覧 */
 runRoutes.get('/runs/:id/untagged-cards', async (c) => {
   const id = c.req.param('id');

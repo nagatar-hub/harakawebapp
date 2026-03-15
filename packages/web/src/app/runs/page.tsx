@@ -27,6 +27,7 @@ type Run = {
   generate_done_at: string | null;
   completed_at: string | null;
   error_message: string | null;
+  aborted_at: string | null;
 };
 
 type DetailCard = {
@@ -68,6 +69,7 @@ const STATUS_STYLES: Record<string, string> = {
   completed: 'bg-[#f3faf0] text-[#2d5a2f] border-[#bfd4b8]',
   running: 'bg-blue-50 text-blue-700 border-blue-200 animate-pulse',
   failed: 'bg-[#fff0ec] text-[#8d3a22] border-[#e3b0a2]',
+  aborted: 'bg-amber-50 text-amber-700 border-amber-200',
 };
 
 const PHASES = [
@@ -106,6 +108,7 @@ export default function RunsPage() {
   const [generateConfirmLoading, setGenerateConfirmLoading] = useState(false);
   const [downloadingRunId, setDownloadingRunId] = useState<string | null>(null);
   const [dlProgress, setDlProgress] = useState({ current: 0, total: 0 });
+  const [aborting, setAborting] = useState<string | null>(null);
   const runsRef = useRef(runs);
   runsRef.current = runs;
   // 前回fetchで running だった run ID を記録
@@ -148,6 +151,9 @@ export default function RunsPage() {
           } else if (run.status === 'failed') {
             toastedRef.current.add(run.id);
             addToast({ type: 'warning', message: `ジョブが失敗しました: ${run.error_message || '不明なエラー'}` });
+          } else if (run.status === 'aborted') {
+            toastedRef.current.add(run.id);
+            addToast({ type: 'warning', message: 'ジョブを強制停止しました' });
           }
         }
 
@@ -187,6 +193,17 @@ export default function RunsPage() {
       // ignore
     }
     setTriggering(null);
+  }
+
+  async function abortRun(runId: string) {
+    setAborting(runId);
+    try {
+      await fetch(`${API_URL}/api/runs/${runId}/abort`, { method: 'POST' });
+      setTimeout(fetchRuns, 500);
+    } catch {
+      // ignore
+    }
+    setAborting(null);
   }
 
   async function handleGenerateClick() {
@@ -497,6 +514,19 @@ export default function RunsPage() {
                     {run.status}
                   </span>
                   <span className="text-sm text-text-secondary">{run.triggered_by}</span>
+                  {run.status === 'running' && (
+                    <button
+                      onClick={() => abortRun(run.id)}
+                      disabled={aborting === run.id}
+                      className={`px-3 py-1 rounded-full text-xs font-semibold border transition-all ${
+                        aborting === run.id
+                          ? 'bg-red-100 text-red-400 border-red-200 cursor-not-allowed'
+                          : 'bg-red-50 text-red-600 border-red-300 hover:bg-red-100 active:scale-95'
+                      }`}
+                    >
+                      {aborting === run.id ? '停止中...' : '強制停止'}
+                    </button>
+                  )}
                 </div>
                 <p className="text-base text-text-secondary">{formatDate(run.started_at)}</p>
               </div>

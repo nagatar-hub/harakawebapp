@@ -22,7 +22,7 @@ export type RowConfig = {
   priceLowY: number;
 };
 
-export type RunStatus = 'running' | 'completed' | 'failed';
+export type RunStatus = 'running' | 'completed' | 'failed' | 'aborted';
 export type RuleMatchType = 'exact' | 'contains' | 'regex';
 export type RuleBehavior = 'isolate' | 'merge' | 'exclude';
 
@@ -48,6 +48,8 @@ export type RunRow = {
   generate_done_at: string | null;
   completed_at: string | null;
   error_message: string | null;
+  process_pid: number | null;
+  aborted_at: string | null;
 };
 
 export type RuleRow = {
