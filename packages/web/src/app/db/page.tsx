@@ -235,7 +235,7 @@ export default function DbPage() {
   }, [fetchStats, fetchTagOptions]);
 
   /** カード更新 PATCH */
-  const updateCard = useCallback(async (id: string, field: 'tag' | 'alt_image_url', value: string) => {
+  const updateCard = useCallback(async (id: string, field: 'tag' | 'alt_image_url' | 'card_name', value: string) => {
     const res = await fetch(`${API_URL}/api/db-cards/${id}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
@@ -245,9 +245,17 @@ export default function DbPage() {
     const updated: DbCard = await res.json();
     setCards((prev) => prev.map((c) => (c.id === id ? updated : c)));
     fetchStats();
-    // タグが新規追加された場合、オプションも再取得
     if (field === 'tag') fetchTagOptions();
   }, [fetchStats, fetchTagOptions]);
+
+  /** カード削除 */
+  const deleteCard = useCallback(async (id: string) => {
+    const res = await fetch(`${API_URL}/api/db-cards/${id}`, { method: 'DELETE' });
+    if (!res.ok) throw new Error('削除に失敗しました');
+    setCards((prev) => prev.filter((c) => c.id !== id));
+    setPreviewCard(null);
+    fetchStats();
+  }, [fetchStats]);
 
   /** 画像ヘルスチェック実行 */
   const runHealthCheck = useCallback(async () => {
@@ -397,7 +405,7 @@ export default function DbPage() {
               </thead>
               <tbody>
                 {filteredCards.map((card) => (
-                  <tr key={card.id} className="border-t border-border-card hover:bg-[#ded5cb] transition-colors">
+                  <tr key={card.id} className="border-t border-border-card hover:bg-[#ded5cb] transition-colors cursor-pointer" onClick={() => setPreviewCard(card)}>
                     <td className="px-4 py-3">
                       <div className="relative">
                         {card.image_url ? (
@@ -436,14 +444,14 @@ export default function DbPage() {
                     </td>
                     <td className="px-4 py-3 text-text-secondary text-sm">{card.grade || '-'}</td>
                     <td className="px-4 py-3 text-text-secondary text-sm">{card.list_no || '-'}</td>
-                    <td className="px-4 py-3">
+                    <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
                       <TagSelectCell
                         value={card.tag || ''}
                         options={getTagOptionsForCard(card.franchise)}
                         onSave={(v) => updateCard(card.id, 'tag', v)}
                       />
                     </td>
-                    <td className="px-4 py-3">
+                    <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
                       <InlineEditCell
                         value={card.alt_image_url || ''}
                         placeholder="URL を入力"
@@ -600,10 +608,21 @@ export default function DbPage() {
 
             {/* カード詳細（スクロール可能） */}
             <div className="p-4 space-y-3 overflow-y-auto flex-1">
-              {/* カード名 + 基本情報を横並び */}
+              {/* カード名（編集可能） + 基本情報 */}
               <div className="flex items-start justify-between gap-3">
-                <div className="min-w-0">
-                  <p className="font-bold text-text-primary text-base truncate">{previewCard.card_name}</p>
+                <div className="min-w-0 flex-1">
+                  <InlineEditCell
+                    value={previewCard.card_name}
+                    placeholder="カード名"
+                    onSave={async (v) => {
+                      if (!v) return;
+                      await updateCard(previewCard.id, 'card_name', v);
+                      setPreviewCard((prev) => prev ? { ...prev, card_name: v } : null);
+                    }}
+                    renderDisplay={(v) => (
+                      <span className="font-bold text-text-primary text-base">{v}</span>
+                    )}
+                  />
                   <p className="text-sm text-text-secondary mt-0.5">
                     {FRANCHISE_JA[previewCard.franchise] || previewCard.franchise}
                   </p>
@@ -657,6 +676,21 @@ export default function DbPage() {
                     }
                   />
                 </div>
+              </div>
+
+              {/* 削除ボタン */}
+              <div className="pt-2 border-t border-border-card">
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (confirm(`「${previewCard.card_name}」を削除しますか？`)) {
+                      deleteCard(previewCard.id);
+                    }
+                  }}
+                  className="w-full py-2 text-sm font-medium text-red-500 hover:bg-red-50 rounded-lg transition-colors"
+                >
+                  このカードを削除
+                </button>
               </div>
             </div>
           </div>

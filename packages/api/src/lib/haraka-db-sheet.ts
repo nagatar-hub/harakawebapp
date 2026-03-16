@@ -121,6 +121,7 @@ function colNumberToLetter(colNum: number): string {
  */
 const FIELD_TO_COL: Record<string, number> = {
   tag: 2,           // B列（GROUP）
+  card_name: 3,     // C列（ガチャ選択肢名称）
   alt_image_url: 7, // G列（ALT_IMAGE）
 };
 

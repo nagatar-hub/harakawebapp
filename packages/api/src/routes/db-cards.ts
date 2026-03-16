@@ -188,10 +188,10 @@ dbCardRoutes.post('/db-cards/health-check', async (c) => {
   return c.json({ checked: cards.length, ok: okCount, dead: deadCount });
 });
 
-/** db_card 個別更新（tag / alt_image_url） + シート書き戻し */
+/** db_card 個別更新（tag / alt_image_url / card_name） + シート書き戻し */
 dbCardRoutes.patch('/db-cards/:id', async (c) => {
   const id = c.req.param('id');
-  const body = await c.req.json<{ tag?: string; alt_image_url?: string }>();
+  const body = await c.req.json<{ tag?: string; alt_image_url?: string; card_name?: string }>();
   const supabase = createSupabaseClient();
 
   // 更新対象フィールドを構築
@@ -206,6 +206,10 @@ dbCardRoutes.patch('/db-cards/:id', async (c) => {
     updates.alt_image_url = body.alt_image_url || null;
     sheetUpdates.push({ field: 'alt_image_url', value: body.alt_image_url || '' });
   }
+  if (body.card_name !== undefined) {
+    updates.card_name = body.card_name || null;
+    sheetUpdates.push({ field: 'card_name', value: body.card_name || '' });
+  }
 
   if (Object.keys(updates).length === 0) {
     return c.json({ error: 'No fields to update' }, 400);
@@ -218,7 +222,7 @@ dbCardRoutes.patch('/db-cards/:id', async (c) => {
     .from('db_card')
     .update(updates)
     .eq('id', id)
-    .select('id, franchise, tag, card_name, grade, list_no, image_url, alt_image_url, rarity_icon, sheet_row_number')
+    .select('id, franchise, tag, card_name, grade, list_no, image_url, alt_image_url, rarity_icon, sheet_row_number, image_status')
     .single();
 
   if (error) return c.json({ error: error.message }, 500);
@@ -234,4 +238,19 @@ dbCardRoutes.patch('/db-cards/:id', async (c) => {
   }
 
   return c.json(data);
+});
+
+/** db_card 削除 */
+dbCardRoutes.delete('/db-cards/:id', async (c) => {
+  const id = c.req.param('id');
+  const supabase = createSupabaseClient();
+
+  const { error } = await supabase
+    .from('db_card')
+    .delete()
+    .eq('id', id);
+
+  if (error) return c.json({ error: error.message }, 500);
+
+  return c.json({ ok: true });
 });
