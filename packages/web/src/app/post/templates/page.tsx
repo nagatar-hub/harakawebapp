@@ -79,6 +79,7 @@ export default function TemplatesPage() {
 
   return (
     <div>
+      <Link href="/post" className="text-sm text-text-secondary hover:text-text-primary transition-colors mb-1 inline-block">&larr; X投稿管理</Link>
       <h1 className="text-2xl font-bold mb-6">投稿テンプレート管理</h1>
 
       {/* Template List */}

@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState, useCallback } from 'react';
+import Link from 'next/link';
 
 type Variable = {
   id: string;
@@ -88,6 +89,7 @@ export default function VariablesPage() {
 
   return (
     <div>
+      <Link href="/post" className="text-sm text-text-secondary hover:text-text-primary transition-colors mb-1 inline-block">&larr; X投稿管理</Link>
       <h1 className="text-2xl font-bold mb-6">テンプレート変数管理</h1>
 
       {/* System Variables */}

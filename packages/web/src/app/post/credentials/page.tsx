@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import Link from 'next/link';
 
 const API = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080';
 
@@ -115,6 +116,7 @@ export default function CredentialsPage() {
 
   return (
     <div>
+      <Link href="/post" className="text-sm text-text-secondary hover:text-text-primary transition-colors mb-1 inline-block">&larr; X投稿管理</Link>
       <h1 className="text-2xl font-bold mb-2">X認証情報管理</h1>
       <p className="text-text-secondary text-sm mb-4">
         投稿に使用するXアカウントを管理します。

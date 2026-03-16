@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { useParams } from 'next/navigation';
+import Link from 'next/link';
 import { FranchiseTabs } from '@/components/franchise-tabs';
 import { ImageModal } from '@/components/image-modal';
 import { PageDetailModal } from './page-detail-modal';
@@ -171,6 +172,7 @@ export default function GalleryDatePage() {
 
       <div className="flex items-center justify-between mb-14">
         <div>
+          <Link href="/gallery" className="text-sm text-text-secondary hover:text-text-primary transition-colors mb-1 inline-block">&larr; ギャラリー</Link>
           <h1 className="page-title text-4xl text-text-primary">{date}</h1>
         </div>
         <div className="flex items-center gap-3">
