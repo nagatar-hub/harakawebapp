@@ -515,7 +515,17 @@ function CardAddPopup({
   );
 }
 
-/* ─── Sortable Row ─── */
+/* ─── Image Status Badge ─── */
+function ImageStatusBadge({ card }: { card: CardDetail }) {
+  if (card.image_status === 'dead') return <span className="text-xs text-red-500">dead</span>;
+  if (card.image_status === 'fallback') return <span className="text-xs text-yellow-600">代替</span>;
+  if (card.image_status === 'unchecked') return <span className="text-xs text-warm-400">未チェック</span>;
+  if (card.alt_image_url) return <span className="text-xs text-green-600">代替設定済</span>;
+  if (!card.image_url && !card.alt_image_url) return <span className="text-xs text-red-500">画像なし</span>;
+  return <span className="text-xs text-text-secondary">OK</span>;
+}
+
+/* ─── Sortable Row (Desktop table) ─── */
 function SortableRow({
   card,
   idx,
@@ -591,19 +601,7 @@ function SortableRow({
         {formatPrice(card.price_low)}
       </td>
       <td className="py-2 cursor-pointer" onClick={onClick}>
-        {card.image_status === 'dead' ? (
-          <span className="text-xs text-red-500">dead</span>
-        ) : card.image_status === 'fallback' ? (
-          <span className="text-xs text-yellow-600">代替</span>
-        ) : card.image_status === 'unchecked' ? (
-          <span className="text-xs text-warm-400">未チェック</span>
-        ) : card.alt_image_url ? (
-          <span className="text-xs text-green-600">代替設定済</span>
-        ) : !card.image_url && !card.alt_image_url ? (
-          <span className="text-xs text-red-500">画像なし</span>
-        ) : (
-          <span className="text-xs text-text-secondary">OK</span>
-        )}
+        <ImageStatusBadge card={card} />
       </td>
       <td className="py-2 pl-2">
         <button
@@ -615,6 +613,90 @@ function SortableRow({
         </button>
       </td>
     </tr>
+  );
+}
+
+/* ─── Sortable Card (Mobile) ─── */
+function SortableCard({
+  card,
+  idx,
+  onClick,
+  onDelete,
+}: {
+  card: CardDetail;
+  idx: number;
+  onClick: () => void;
+  onDelete: () => void;
+}) {
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({ id: card.id });
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.5 : 1,
+    zIndex: isDragging ? 50 : undefined,
+  };
+
+  return (
+    <div
+      ref={setNodeRef}
+      style={style}
+      className={`flex items-center gap-2 p-2.5 rounded-xl border transition-colors ${isDragging ? 'bg-warm-200 border-warm-300' : 'bg-white border-border-card'}`}
+    >
+      {/* Drag handle */}
+      <button
+        {...attributes}
+        {...listeners}
+        className="cursor-grab active:cursor-grabbing p-1 text-text-secondary hover:text-text-primary flex-shrink-0 touch-none"
+      >
+        ⠿
+      </button>
+
+      {/* Number */}
+      <span className="text-xs text-text-secondary w-5 text-center flex-shrink-0">{idx + 1}</span>
+
+      {/* Thumbnail */}
+      <div className="w-9 h-12 rounded border border-border-card bg-warm-100 overflow-hidden flex-shrink-0" onClick={onClick}>
+        {(card.alt_image_url || card.image_url) ? (
+          <img
+            src={card.alt_image_url || card.image_url || ''}
+            alt=""
+            className="w-full h-full object-contain"
+            onError={e => { (e.target as HTMLImageElement).style.display = 'none'; }}
+          />
+        ) : (
+          <span className="text-[9px] text-text-secondary flex items-center justify-center h-full">-</span>
+        )}
+      </div>
+
+      {/* Info */}
+      <div className="flex-1 min-w-0 cursor-pointer" onClick={onClick}>
+        <div className="text-sm font-medium text-text-primary truncate">{card.card_name}</div>
+        <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 mt-0.5">
+          {card.tag && (
+            <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-warm-100 text-text-secondary">{card.tag}</span>
+          )}
+          <span className="text-xs text-text-primary">{formatPrice(card.price_high)}</span>
+          <ImageStatusBadge card={card} />
+        </div>
+      </div>
+
+      {/* Delete */}
+      <button
+        onClick={(e) => { e.stopPropagation(); onDelete(); }}
+        className="w-7 h-7 rounded-full text-warm-400 hover:text-red-500 hover:bg-red-50 flex items-center justify-center text-sm transition-colors flex-shrink-0"
+        title="削除"
+      >
+        ×
+      </button>
+    </div>
   );
 }
 
@@ -766,26 +848,26 @@ export function PageDetailModal({
 
   return (
     <>
-      <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4" onClick={onClose}>
+      <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-end sm:items-center justify-center sm:p-4" onClick={onClose}>
         <div
-          className="bg-page-bg rounded-2xl border border-border-card shadow-2xl max-w-5xl w-full max-h-[90vh] overflow-hidden flex flex-col"
+          className="bg-page-bg sm:rounded-2xl border-t sm:border border-border-card shadow-2xl max-w-5xl w-full max-h-[95vh] sm:max-h-[90vh] overflow-hidden flex flex-col rounded-t-2xl"
           onClick={e => e.stopPropagation()}
         >
           {/* Header */}
-          <div className="flex items-center justify-between px-6 py-4 border-b border-border-card">
-            <div>
-              <h2 className="text-xl font-bold text-text-primary">
+          <div className="flex items-center justify-between px-4 sm:px-6 py-3 sm:py-4 border-b border-border-card">
+            <div className="min-w-0">
+              <h2 className="text-base sm:text-xl font-bold text-text-primary truncate">
                 {page?.page_label || `page-${page?.page_index}`}
               </h2>
-              <p className="text-sm text-text-secondary mt-0.5">
+              <p className="text-xs sm:text-sm text-text-secondary mt-0.5">
                 {page?.franchise} · {cards.length}枚
               </p>
             </div>
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-2 sm:gap-3 flex-shrink-0">
               <button
                 onClick={handleRegenerate}
                 disabled={regenerating}
-                className={`px-4 py-2 rounded-full text-sm font-semibold transition-all duration-100 ${
+                className={`px-3 sm:px-4 py-1.5 sm:py-2 rounded-full text-xs sm:text-sm font-semibold transition-all duration-100 ${
                   regenerating
                     ? 'bg-blue-600 text-white cursor-wait'
                     : 'bg-text-primary text-white hover:bg-warm-800 active:scale-90'
@@ -800,7 +882,7 @@ export function PageDetailModal({
               </button>
               <button
                 onClick={onClose}
-                className="w-8 h-8 rounded-full bg-warm-200 text-text-secondary hover:bg-warm-300 flex items-center justify-center text-lg"
+                className="w-7 sm:w-8 h-7 sm:h-8 rounded-full bg-warm-200 text-text-secondary hover:bg-warm-300 flex items-center justify-center text-base sm:text-lg"
               >
                 ×
               </button>
@@ -819,14 +901,14 @@ export function PageDetailModal({
           )}
 
           {/* Content */}
-          <div className="flex-1 overflow-y-auto p-6">
+          <div className="flex-1 overflow-y-auto p-3 sm:p-6">
             {loading ? (
               <p className="text-text-secondary">読み込み中...</p>
             ) : (
-              <div className="flex gap-6">
-                {/* Left: Page preview */}
+              <div className="flex flex-col sm:flex-row gap-4 sm:gap-6">
+                {/* Left: Page preview (hidden on mobile, shown on desktop) */}
                 {page?.image_url && (
-                  <div className="flex-shrink-0 w-64">
+                  <div className="hidden sm:block flex-shrink-0 w-64">
                     <img
                       src={`${page.image_url}?t=${Date.now()}`}
                       alt={page.page_label || ''}
@@ -835,45 +917,67 @@ export function PageDetailModal({
                   </div>
                 )}
 
-                {/* Right: Card table */}
+                {/* Card list */}
                 <div className="flex-1 min-w-0">
-                  <p className="text-xs text-text-secondary mb-2">カードをクリックして編集 · ⠿をドラッグで並べ替え</p>
+                  <p className="text-xs text-text-secondary mb-2">タップして編集 · ⠿で並べ替え</p>
+
                   <DndContext
                     sensors={sensors}
                     collisionDetection={closestCenter}
                     onDragEnd={handleDragEnd}
                   >
-                    <table className="w-full text-sm">
-                      <thead>
-                        <tr className="text-left text-text-secondary border-b border-border-card">
-                          <th className="pb-2 pr-1 w-8"></th>
-                          <th className="pb-2 pr-2 w-8">#</th>
-                          <th className="pb-2 pr-2">画像</th>
-                          <th className="pb-2 pr-2">カード名</th>
-                          <th className="pb-2 pr-2">タグ</th>
-                          <th className="pb-2 pr-2 text-right">価格(高)</th>
-                          <th className="pb-2 pr-2 text-right">価格(低)</th>
-                          <th className="pb-2 whitespace-nowrap">状態</th>
-                          <th className="pb-2 w-8 text-center">削除</th>
-                        </tr>
-                      </thead>
+                    {/* Desktop: Table */}
+                    <div className="hidden sm:block">
+                      <table className="w-full text-sm">
+                        <thead>
+                          <tr className="text-left text-text-secondary border-b border-border-card">
+                            <th className="pb-2 pr-1 w-8"></th>
+                            <th className="pb-2 pr-2 w-8">#</th>
+                            <th className="pb-2 pr-2">画像</th>
+                            <th className="pb-2 pr-2">カード名</th>
+                            <th className="pb-2 pr-2">タグ</th>
+                            <th className="pb-2 pr-2 text-right">価格(高)</th>
+                            <th className="pb-2 pr-2 text-right">価格(低)</th>
+                            <th className="pb-2 whitespace-nowrap">状態</th>
+                            <th className="pb-2 w-8 text-center">削除</th>
+                          </tr>
+                        </thead>
+                        <SortableContext
+                          items={cards.map(c => c.id)}
+                          strategy={verticalListSortingStrategy}
+                        >
+                          <tbody>
+                            {cards.map((card, idx) => (
+                              <SortableRow
+                                key={card.id}
+                                card={card}
+                                idx={idx}
+                                onClick={() => setEditingCardId(card.id)}
+                                onDelete={() => handleDeleteCard(card.id)}
+                              />
+                            ))}
+                          </tbody>
+                        </SortableContext>
+                      </table>
+                    </div>
+
+                    {/* Mobile: Card list */}
+                    <div className="sm:hidden space-y-1.5">
                       <SortableContext
                         items={cards.map(c => c.id)}
                         strategy={verticalListSortingStrategy}
                       >
-                        <tbody>
-                          {cards.map((card, idx) => (
-                            <SortableRow
-                              key={card.id}
-                              card={card}
-                              idx={idx}
-                              onClick={() => setEditingCardId(card.id)}
-                              onDelete={() => handleDeleteCard(card.id)}
-                            />
-                          ))}
-                        </tbody>
+                        {cards.map((card, idx) => (
+                          <SortableCard
+                            key={card.id}
+                            card={card}
+                            idx={idx}
+                            onClick={() => setEditingCardId(card.id)}
+                            onDelete={() => handleDeleteCard(card.id)}
+                          />
+                        ))}
                       </SortableContext>
-                    </table>
+                    </div>
                   </DndContext>
 
                   {/* カード追加ボタン */}
