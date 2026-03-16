@@ -271,17 +271,43 @@ export default function DbPage() {
     return tagOptions[franchise] || [];
   };
 
-  /** 現在のカード一覧から使われているタグを抽出 */
-  const availableTags = (() => {
+  /** 現在のカード一覧からタグを抽出し、第一タグでグルーピング */
+  const { tagSelectOptions, hasAnyTag } = (() => {
     const tags = new Set<string>();
     cards.forEach((c) => { if (c.tag) tags.add(c.tag); });
-    return Array.from(tags).sort((a, b) => a.localeCompare(b));
+    const sorted = Array.from(tags).sort((a, b) => a.localeCompare(b));
+    if (sorted.length === 0) return { tagSelectOptions: [] as { value: string; label: string }[], hasAnyTag: false };
+
+    // 第一タグ（/の前）でグルーピング
+    const groups = new Map<string, string[]>();
+    for (const tag of sorted) {
+      const prefix = tag.split('/')[0];
+      if (!groups.has(prefix)) groups.set(prefix, []);
+      groups.get(prefix)!.push(tag);
+    }
+
+    const options: { value: string; label: string }[] = [];
+    for (const [prefix, members] of groups) {
+      // サブタグが2つ以上ある場合「〇〇（すべて）」を追加
+      if (members.length >= 2) {
+        options.push({ value: `${prefix}/*`, label: `${prefix}（すべて）` });
+      }
+      for (const tag of members) {
+        options.push({ value: tag, label: tag });
+      }
+    }
+    return { tagSelectOptions: options, hasAnyTag: true };
   })();
 
   /** タグ絞り込み済みカード */
-  const filteredCards = filterTag
-    ? cards.filter((c) => c.tag === filterTag)
-    : cards;
+  const filteredCards = (() => {
+    if (!filterTag) return cards;
+    if (filterTag.endsWith('/*')) {
+      const prefix = filterTag.slice(0, -2);
+      return cards.filter((c) => c.tag !== null && c.tag.split('/')[0] === prefix);
+    }
+    return cards.filter((c) => c.tag === filterTag);
+  })();
 
   // フランチャイズタブ変更時にタグフィルターをリセット
   useEffect(() => {
@@ -311,15 +337,15 @@ export default function DbPage() {
             >
               {healthChecking ? 'チェック中...' : '画像ヘルスチェック'}
             </button>
-            {availableTags.length > 0 && (
+            {hasAnyTag && (
               <select
                 value={filterTag || ''}
                 onChange={(e) => setFilterTag(e.target.value || null)}
                 className="px-3 py-1.5 text-xs font-medium rounded-lg border border-border-card bg-white text-text-primary focus:outline-none focus:ring-2 focus:ring-[#b8a080] appearance-none bg-[url('data:image/svg+xml;charset=utf-8,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%2212%22%20height%3D%2212%22%20viewBox%3D%220%200%2012%2012%22%3E%3Cpath%20fill%3D%22%23666%22%20d%3D%22M6%208L1%203h10z%22%2F%3E%3C%2Fsvg%3E')] bg-no-repeat bg-[right_8px_center] pr-7"
               >
                 <option value="">すべてのタグ</option>
-                {availableTags.map((tag) => (
-                  <option key={tag} value={tag}>{tag}</option>
+                {tagSelectOptions.map((opt) => (
+                  <option key={opt.value} value={opt.value}>{opt.label}</option>
                 ))}
               </select>
             )}
@@ -342,7 +368,7 @@ export default function DbPage() {
 
       {filterTag && (
         <p className="text-xs text-text-secondary mb-3">
-          「{filterTag}」で絞り込み中: <span className="font-bold text-text-primary">{filteredCards.length}件</span> / {cards.length}件
+          「{filterTag.endsWith('/*') ? `${filterTag.slice(0, -2)}（すべて）` : filterTag}」で絞り込み中: <span className="font-bold text-text-primary">{filteredCards.length}件</span> / {cards.length}件
         </p>
       )}
 
