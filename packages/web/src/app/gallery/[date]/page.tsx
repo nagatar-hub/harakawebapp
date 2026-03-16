@@ -135,7 +135,7 @@ export default function GalleryDatePage() {
     setDownloading(true);
     setDlProgress({ current: 0, total: list.length });
     try {
-      await downloadImagesAsZip(list, `haraka_${date}_selected.zip`, (cur, total) => setDlProgress({ current: cur, total }));
+      await shareOrDownloadImages(list, `haraka_${date}_selected.zip`, (cur, total) => setDlProgress({ current: cur, total }));
     } finally {
       setDownloading(false);
       setSelectMode(false);

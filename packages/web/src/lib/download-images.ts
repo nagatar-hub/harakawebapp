@@ -5,64 +5,58 @@ export type DownloadableImage = {
   filename: string;
 };
 
-/**
- * Web Share API で画像を共有（スマホ向け: 写真アプリに保存可能）
- * 非対応ブラウザではZIPフォールバック
- */
+/** Web Share API が使えるかどうか（ダミーファイルで判定） */
+function isShareSupported(): boolean {
+  if (typeof navigator === 'undefined') return false;
+  if (typeof navigator.share !== 'function') return false;
+  if (typeof navigator.canShare !== 'function') return false;
+  const dummy = new File([''], 'test.png', { type: 'image/png' });
+  return navigator.canShare({ files: [dummy] });
+}
+
+/** 少数枚（≤3）かつWeb Share対応なら共有、それ以外はZIP */
 export async function shareOrDownloadImages(
   images: DownloadableImage[],
   zipFilename: string,
   onProgress?: (current: number, total: number) => void,
 ): Promise<void> {
-  // 1枚だけならシンプルに共有/ダウンロード
-  if (images.length === 1) {
-    const img = images[0];
-    onProgress?.(0, 1);
-    const res = await fetch(img.image_url);
-    if (!res.ok) throw new Error('Failed to fetch image');
-    const blob = await res.blob();
-    onProgress?.(1, 1);
+  const useShare = isShareSupported() && images.length <= 3;
 
-    const file = new File([blob], img.filename, { type: blob.type || 'image/png' });
-    if (canShareFiles([file])) {
-      await navigator.share({ files: [file] });
-      return;
-    }
-    triggerDownload(blob, img.filename);
-    return;
-  }
-
-  // 複数枚: まず全画像をfetch
-  const files: File[] = [];
+  // 画像をfetch
+  const blobs: { blob: Blob; filename: string }[] = [];
   for (let i = 0; i < images.length; i++) {
     onProgress?.(i, images.length);
     try {
       const res = await fetch(images[i].image_url);
       if (!res.ok) continue;
       const blob = await res.blob();
-      files.push(new File([blob], images[i].filename, { type: blob.type || 'image/png' }));
+      blobs.push({ blob, filename: images[i].filename });
     } catch {
-      // skip failed images
+      // skip
     }
   }
   onProgress?.(images.length, images.length);
 
-  if (files.length === 0) return;
+  if (blobs.length === 0) return;
 
-  // Web Share API で共有を試みる
-  if (canShareFiles(files)) {
+  if (useShare) {
+    const files = blobs.map(b => new File([b.blob], b.filename, { type: b.blob.type || 'image/png' }));
     try {
       await navigator.share({ files });
       return;
     } catch (e) {
-      // AbortError = ユーザーがキャンセル → それでOK
       if (e instanceof Error && e.name === 'AbortError') return;
-      // その他のエラー → ZIPフォールバック
+      // share失敗 → ZIPフォールバック
     }
   }
 
-  // フォールバック: ZIP
-  await zipAndDownload(files, zipFilename);
+  // ZIP
+  const zip = new JSZip();
+  for (const b of blobs) {
+    zip.file(b.filename, b.blob);
+  }
+  const content = await zip.generateAsync({ type: 'blob' });
+  triggerDownload(content, zipFilename);
 }
 
 /**
@@ -94,31 +88,25 @@ export async function downloadImagesAsZip(
 }
 
 /**
- * 単一画像をダウンロード
+ * 単一画像をダウンロード/共有
  */
 export async function downloadSingleImage(url: string, filename: string): Promise<void> {
   const res = await fetch(url);
   if (!res.ok) throw new Error('Failed to fetch image');
   const blob = await res.blob();
-  triggerDownload(blob, filename);
-}
 
-/** Web Share API でファイル共有が可能か判定 */
-function canShareFiles(files: File[]): boolean {
-  return typeof navigator !== 'undefined'
-    && typeof navigator.share === 'function'
-    && typeof navigator.canShare === 'function'
-    && navigator.canShare({ files });
-}
-
-/** File[] からZIPを生成してダウンロード */
-async function zipAndDownload(files: File[], zipFilename: string): Promise<void> {
-  const zip = new JSZip();
-  for (const file of files) {
-    zip.file(file.name, file);
+  // Web Share API 対応なら共有メニュー
+  if (isShareSupported()) {
+    const file = new File([blob], filename, { type: blob.type || 'image/png' });
+    try {
+      await navigator.share({ files: [file] });
+      return;
+    } catch (e) {
+      if (e instanceof Error && e.name === 'AbortError') return;
+    }
   }
-  const content = await zip.generateAsync({ type: 'blob' });
-  triggerDownload(content, zipFilename);
+
+  triggerDownload(blob, filename);
 }
 
 function triggerDownload(blob: Blob, filename: string) {

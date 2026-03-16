@@ -495,16 +495,16 @@ export default function DbPage() {
           onClick={() => setPreviewCard(null)}
         >
           <div
-            className="bg-card-bg w-full sm:max-w-md sm:rounded-2xl rounded-t-2xl max-h-[85vh] overflow-y-auto"
+            className="bg-card-bg w-full sm:max-w-md sm:rounded-2xl rounded-t-2xl max-h-[85vh] flex flex-col"
             onClick={(e) => e.stopPropagation()}
           >
-            {/* 画像 */}
-            <div className="relative bg-background">
+            {/* 画像（高さ制限して下の情報が見えるように） */}
+            <div className="relative bg-background flex-shrink-0 max-h-[45vh] overflow-hidden flex items-center justify-center rounded-t-2xl sm:rounded-t-2xl">
               {(previewCard.image_url || previewCard.alt_image_url) ? (
                 <img
                   src={previewCard.alt_image_url || previewCard.image_url || ''}
                   alt={previewCard.card_name}
-                  className="w-full h-auto"
+                  className="w-full h-full object-contain"
                   onError={(e) => {
                     if (previewCard.image_url && (e.target as HTMLImageElement).src !== previewCard.image_url) {
                       (e.target as HTMLImageElement).src = previewCard.image_url;
@@ -512,7 +512,7 @@ export default function DbPage() {
                   }}
                 />
               ) : (
-                <div className="w-full h-48 flex items-center justify-center bg-red-50">
+                <div className="w-full h-32 flex items-center justify-center bg-red-50">
                   <span className="text-red-400">画像なし</span>
                 </div>
               )}
@@ -536,63 +536,65 @@ export default function DbPage() {
               )}
             </div>
 
-            {/* カード詳細 */}
-            <div className="p-4 space-y-3">
-              <div>
-                <p className="font-bold text-text-primary text-base">{previewCard.card_name}</p>
-                <p className="text-sm text-text-secondary mt-0.5">
-                  {FRANCHISE_JA[previewCard.franchise] || previewCard.franchise}
-                </p>
+            {/* カード詳細（スクロール可能） */}
+            <div className="p-4 space-y-3 overflow-y-auto flex-1">
+              {/* カード名 + 基本情報を横並び */}
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <p className="font-bold text-text-primary text-base truncate">{previewCard.card_name}</p>
+                  <p className="text-sm text-text-secondary mt-0.5">
+                    {FRANCHISE_JA[previewCard.franchise] || previewCard.franchise}
+                  </p>
+                </div>
+                <div className="flex gap-3 flex-shrink-0 text-sm">
+                  {previewCard.grade && (
+                    <div className="text-right">
+                      <span className="text-text-secondary text-[10px] block">グレード</span>
+                      <p className="text-text-primary font-medium">{previewCard.grade}</p>
+                    </div>
+                  )}
+                  {previewCard.list_no && (
+                    <div className="text-right">
+                      <span className="text-text-secondary text-[10px] block">品番</span>
+                      <p className="text-text-primary font-medium">{previewCard.list_no}</p>
+                    </div>
+                  )}
+                </div>
               </div>
 
-              <div className="flex gap-4 text-sm">
-                {previewCard.grade && (
-                  <div>
-                    <span className="text-text-secondary text-xs">グレード</span>
-                    <p className="text-text-primary font-medium">{previewCard.grade}</p>
-                  </div>
-                )}
-                {previewCard.list_no && (
-                  <div>
-                    <span className="text-text-secondary text-xs">品番</span>
-                    <p className="text-text-primary font-medium">{previewCard.list_no}</p>
-                  </div>
-                )}
-              </div>
-
-              {/* タグ編集 */}
-              <div>
-                <span className="text-text-secondary text-xs block mb-1">タグ</span>
-                <TagSelectCell
-                  value={previewCard.tag || ''}
-                  options={getTagOptionsForCard(previewCard.franchise)}
-                  onSave={async (v) => {
-                    await updateCard(previewCard.id, 'tag', v);
-                    setPreviewCard((prev) => prev ? { ...prev, tag: v || null } : null);
-                  }}
-                />
-              </div>
-
-              {/* 代替画像URL編集 */}
-              <div>
-                <span className="text-text-secondary text-xs block mb-1">代替画像URL</span>
-                <InlineEditCell
-                  value={previewCard.alt_image_url || ''}
-                  placeholder="URL を入力"
-                  onSave={async (v) => {
-                    await updateCard(previewCard.id, 'alt_image_url', v);
-                    setPreviewCard((prev) => prev ? { ...prev, alt_image_url: v || null } : null);
-                  }}
-                  renderDisplay={(v) =>
-                    v ? (
-                      <span className="text-green-600 text-sm font-medium truncate block" title={v}>
-                        {v}
-                      </span>
-                    ) : (
-                      <span className="text-text-secondary text-sm italic">未設定（タップで入力）</span>
-                    )
-                  }
-                />
+              {/* タグ・代替URL を横並びコンパクトに */}
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <span className="text-text-secondary text-[10px] block mb-1">タグ</span>
+                  <TagSelectCell
+                    value={previewCard.tag || ''}
+                    options={getTagOptionsForCard(previewCard.franchise)}
+                    onSave={async (v) => {
+                      await updateCard(previewCard.id, 'tag', v);
+                      setPreviewCard((prev) => prev ? { ...prev, tag: v || null } : null);
+                    }}
+                  />
+                </div>
+                <div>
+                  <span className="text-text-secondary text-[10px] block mb-1">代替画像URL</span>
+                  <InlineEditCell
+                    value={previewCard.alt_image_url || ''}
+                    placeholder="URL を入力"
+                    onSave={async (v) => {
+                      await updateCard(previewCard.id, 'alt_image_url', v);
+                      setPreviewCard((prev) => prev ? { ...prev, alt_image_url: v || null } : null);
+                    }}
+                    renderDisplay={(v) =>
+                      v ? (
+                        <span className="text-green-600 text-xs font-medium truncate block" title={v}>
+                          {v}
+                        </span>
+                      ) : (
+                        <span className="text-text-secondary text-xs italic">未設定</span>
+                      )
+                    }
+                  />
+                </div>
               </div>
             </div>
           </div>
