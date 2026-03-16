@@ -317,7 +317,7 @@ export default function DbPage() {
                 onChange={(e) => setFilterTag(e.target.value || null)}
                 className="px-3 py-1.5 text-xs font-medium rounded-lg border border-border-card bg-white text-text-primary focus:outline-none focus:ring-2 focus:ring-[#b8a080] appearance-none bg-[url('data:image/svg+xml;charset=utf-8,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%2212%22%20height%3D%2212%22%20viewBox%3D%220%200%2012%2012%22%3E%3Cpath%20fill%3D%22%23666%22%20d%3D%22M6%208L1%203h10z%22%2F%3E%3C%2Fsvg%3E')] bg-no-repeat bg-[right_8px_center] pr-7"
               >
-                <option value="">タグ絞り込み</option>
+                <option value="">すべてのタグ</option>
                 {availableTags.map((tag) => (
                   <option key={tag} value={tag}>{tag}</option>
                 ))}
