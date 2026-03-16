@@ -48,14 +48,18 @@ export async function downloadImage(
           Accept: 'image/webp,image/apng,image/*,*/*;q=0.8',
         },
       });
-      if (!res.ok) return null;
+      if (!res.ok) {
+        console.warn(`[downloadImage] HTTP ${res.status} ${res.statusText}: ${urlOrDriveId.substring(0, 100)}`);
+        return null;
+      }
       const arrayBuffer = await res.arrayBuffer();
       return Buffer.from(arrayBuffer);
     } else {
       // Google Drive ファイル ID
       return await downloadDriveFile(accessToken, urlOrDriveId);
     }
-  } catch {
+  } catch (err) {
+    console.warn(`[downloadImage] 例外: ${urlOrDriveId.substring(0, 80)} — ${err instanceof Error ? err.message : String(err)}`);
     return null;
   }
 }

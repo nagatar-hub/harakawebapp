@@ -6,6 +6,9 @@ import path from 'path';
 
 export const runRoutes = new Hono();
 
+/** 実行中ジョブのPID管理（インスタンス内メモリ） */
+const runningJobs: { jobName: string; pid: number; startedAt: Date }[] = [];
+
 /** 実行履歴一覧 */
 runRoutes.get('/runs', async (c) => {
   const supabase = createSupabaseClient();
@@ -42,11 +45,19 @@ function triggerJob(jobName: string) {
   const jobEntry = path.resolve(__dirname, '..', '..', '..', 'job', 'dist', 'index.js');
   const child = fork(jobEntry, [], {
     env: { ...process.env, JOB_NAME: jobName, TRIGGER: 'web-ui' },
-    stdio: 'ignore',
+    stdio: 'inherit',
     detached: true,
   });
   child.unref();
-  return child.pid;
+  const pid = child.pid;
+  if (pid) {
+    runningJobs.push({ jobName, pid, startedAt: new Date() });
+    child.on('exit', () => {
+      const idx = runningJobs.findIndex(j => j.pid === pid);
+      if (idx !== -1) runningJobs.splice(idx, 1);
+    });
+  }
+  return pid;
 }
 
 runRoutes.post('/jobs/sync', async (c) => {
@@ -150,6 +161,38 @@ runRoutes.get('/runs/:id/excluded-cards', async (c) => {
     price_missing: priceMissing ?? [],
     image_ng: imageNg ?? [],
   });
+});
+
+/** 強制停止: 子プロセスをkill + DBステータス更新 */
+runRoutes.post('/runs/:id/reset', async (c) => {
+  const id = c.req.param('id');
+  const supabase = createSupabaseClient();
+  const { data: run } = await supabase.from('run').select('status').eq('id', id).single();
+  if (!run) return c.json({ error: 'Run not found' }, 404);
+  if (run.status !== 'running') return c.json({ error: `Run is ${run.status}, not running` }, 400);
+
+  // 実行中のジョブプロセスをkill
+  let killed = 0;
+  for (let i = runningJobs.length - 1; i >= 0; i--) {
+    const job = runningJobs[i];
+    try {
+      process.kill(job.pid, 'SIGTERM');
+      killed++;
+      console.log(`[reset] プロセス ${job.pid} (${job.jobName}) にSIGTERM送信`);
+    } catch {
+      // プロセスが既に終了している場合
+      console.log(`[reset] プロセス ${job.pid} は既に終了`);
+    }
+    runningJobs.splice(i, 1);
+  }
+
+  const { error } = await supabase.from('run').update({
+    status: 'failed',
+    error_message: `手動で強制停止されました (${killed}プロセス停止)`,
+    completed_at: new Date().toISOString(),
+  }).eq('id', id);
+  if (error) return c.json({ error: error.message }, 500);
+  return c.json({ status: 'reset', id, killed });
 });
 
 /** 画像NG修正: 新URLをチェックし、OKならDB+シートに反映 */

@@ -723,6 +723,32 @@ export default function RunsPage() {
                 </div>
               )}
 
+              {/* Force stop button for running jobs */}
+              {run.status === 'running' && (
+                <div className="mt-4">
+                  <button
+                    onClick={async () => {
+                      if (!confirm('このジョブを強制停止しますか？')) return;
+                      try {
+                        const res = await fetch(`${API_URL}/api/runs/${run.id}/reset`, { method: 'POST' });
+                        if (res.ok) {
+                          addToast({ type: 'success', message: 'ジョブを強制停止しました。' });
+                          fetchRuns();
+                        } else {
+                          const err = await res.json();
+                          addToast({ type: 'warning', message: `停止失敗: ${err.error}` });
+                        }
+                      } catch {
+                        addToast({ type: 'warning', message: '停止リクエストに失敗しました。' });
+                      }
+                    }}
+                    className="text-sm px-4 py-2 rounded-full border border-red-300 text-red-700 bg-red-50 hover:bg-red-100 transition-colors"
+                  >
+                    ⏹ 強制停止
+                  </button>
+                </div>
+              )}
+
               {run.error_message && (
                 <p className="mt-4 text-sm text-[#8d3a22] bg-[#fff0ec] border border-[#e3b0a2] p-3 rounded-xl">{run.error_message}</p>
               )}

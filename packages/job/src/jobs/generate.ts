@@ -1,15 +1,14 @@
 /**
  * Generate ジョブ — 画像生成パイプライン
  *
- * sync ジョブで作成済みの generated_page + prepared_card を元に、
- * 各ページの画像を合成して Supabase Storage にアップロードする。
- *
  * 処理フロー:
  * 1. 最新の completed run を取得
  * 2. Storage クリーンアップ（同日画像削除）
  * 3. OAuth access token 取得
- * 4. 各 franchise: テンプレDL → レアリティアイコンDL → 画像合成 → Storage upload
+ * 4. 各 franchise: ページプラン再生成 → テンプレDL → レアリティアイコンDL → 画像合成 → Storage upload
  * 5. Run 完了更新
+ *
+ * ページプランは毎回 prepared_card から再生成し、最新の価格フィルターを適用する。
  */
 
 import { createSupabaseClient } from '../lib/supabase.js';
@@ -18,16 +17,20 @@ import { getAccessToken } from '../lib/auth.js';
 import { composePage } from '../lib/image-composer.js';
 import { downloadDriveFile, downloadImagesWithConcurrency } from '../lib/google-drive.js';
 import { updateProgress, clearProgress } from '../lib/progress.js';
+import { planPages } from '../lib/page-planner.js';
+import { batchInsert } from '../lib/batch.js';
 import type {
   Database,
   PreparedCardRow,
   AssetProfileRow,
   LayoutConfig,
   GeneratedPageRow,
+  RuleRow,
 } from '@haraka/shared';
 import { FRANCHISES } from '@haraka/shared';
 
 type RunRow = Database['public']['Tables']['run']['Row'];
+type GeneratedPageInsert = Database['public']['Tables']['generated_page']['Insert'];
 
 // ---------------------------------------------------------------------------
 // ヘルパー関数
@@ -56,6 +59,7 @@ function romanizeLabel(label: string): string {
 
 export async function runGenerate() {
   const supabase = createSupabaseClient();
+  const t0 = Date.now();
 
   // ---- 1. 最新の completed run を取得 ----
   const { data: run, error: runFindError } = await supabase
@@ -89,10 +93,64 @@ export async function runGenerate() {
       }
     }
 
-    // generated_page の画像情報をリセット（再生成のため）
-    await supabase.from('generated_page')
-      .update({ status: 'pending' as const, image_key: null, image_url: null })
-      .eq('run_id', run.id);
+    // ---- 2.5. ページプランを再生成（最新の prepared_card + 価格フィルター適用） ----
+    await updateProgress(supabase, run.id, 5, 100, 'ページプラン再生成中...');
+    console.log('[generate] ページプラン再生成...');
+
+    // 旧 generated_page を全削除
+    await supabase.from('generated_page').delete().eq('run_id', run.id);
+
+    let totalPages = 0;
+    for (const franchise of FRANCHISES) {
+      const { data: allCards } = await supabase
+        .from('prepared_card')
+        .select('*')
+        .eq('run_id', run.id)
+        .eq('franchise', franchise)
+        .returns<PreparedCardRow[]>();
+      if (!allCards || allCards.length === 0) continue;
+
+      // 価格フィルター（sync と同じロジック）
+      const validCards = allCards.filter(
+        c => c.tag && c.price_high != null && c.price_high > 0 && c.price_low != null && c.price_low > 0,
+      );
+      const priceMissing = allCards.filter(c => c.tag && (!c.price_high || !c.price_low));
+      if (priceMissing.length > 0) {
+        console.log(`[generate]   ${franchise}: 価格なし ${priceMissing.length}件（除外）`);
+      }
+      if (validCards.length === 0) continue;
+
+      // asset_profile + rule 取得
+      const { data: profile } = await supabase
+        .from('asset_profile')
+        .select('*')
+        .eq('franchise', franchise)
+        .single<AssetProfileRow>();
+      if (!profile) continue;
+
+      const { data: rules } = await supabase
+        .from('rule')
+        .select('*')
+        .eq('franchise', franchise)
+        .returns<RuleRow[]>();
+
+      const pagePlans = planPages(validCards, rules ?? [], profile.total_slots);
+      console.log(`[generate]   ${franchise}: ${validCards.length}枚 → ${pagePlans.length}ページ`);
+
+      if (pagePlans.length === 0) continue;
+
+      const pageInserts: GeneratedPageInsert[] = pagePlans.map((plan, index) => ({
+        run_id: run.id,
+        franchise,
+        page_index: index,
+        page_label: plan.label,
+        card_ids: plan.cardIds,
+        status: 'pending' as const,
+      }));
+      await batchInsert(supabase, 'generated_page', pageInserts as unknown as Record<string, unknown>[]);
+      totalPages += pagePlans.length;
+    }
+    console.log(`[generate] ページプラン再生成完了: ${totalPages}ページ (${Date.now() - t0}ms)`);
 
     // ---- 3. OAuth access token 取得 ----
     const accessToken = await getAccessToken();
@@ -102,12 +160,6 @@ export async function runGenerate() {
     if (!harakaDbSpreadsheetId) throw new Error('HARAKA_DB_SPREADSHEET_ID が未設定です');
 
     // ---- 4. franchise ごとに画像生成 ----
-    // 総ページ数を計算（進捗バー用）
-    const { count: totalPageCount } = await supabase
-      .from('generated_page')
-      .select('*', { count: 'exact', head: true })
-      .eq('run_id', run.id);
-    const totalPages = totalPageCount ?? 0;
     let pagesGenerated = 0;
 
     const dateText = `${String(today.getMonth() + 1).padStart(2, '0')}/${String(today.getDate()).padStart(2, '0')}`;
@@ -115,9 +167,10 @@ export async function runGenerate() {
     const rarityIconCache = new Map<string, Buffer>();
 
     for (const franchise of FRANCHISES) {
+      const tFranchise = Date.now();
       console.log(`[generate] === ${franchise} ===`);
 
-      // generated_page を取得（sync で作成済み）
+      // generated_page を取得（↑で再生成済み）
       const { data: generatedPages } = await supabase
         .from('generated_page')
         .select('*')
@@ -162,11 +215,13 @@ export async function runGenerate() {
         continue;
       }
 
+      const tTemplate = Date.now();
       console.log(`[generate]   テンプレート/カード裏面ダウンロード中...`);
       const [templateBuffer, cardBackBuffer] = await Promise.all([
         downloadDriveFile(accessToken, templateFileId),
         downloadDriveFile(accessToken, cardBackFileId),
       ]);
+      console.log(`[generate]   テンプレートDL: ${Date.now() - tTemplate}ms`);
 
       // BOX テンプレート
       const extendedLayout = profile.layout_config as LayoutConfig & {
@@ -258,8 +313,18 @@ export async function runGenerate() {
       const assetProfile = profile; // narrowed non-null reference
 
       async function generateOnePage(pageIdx: number) {
+        const tPage = Date.now();
         const generatedPage = pages[pageIdx];
-        const pageCards = generatedPage.card_ids.map(id => cardById.get(id)!).filter(Boolean);
+        const pageCards = generatedPage.card_ids
+          .map(id => cardById.get(id))
+          .filter((c): c is PreparedCardRow => {
+            if (!c) return false;
+            if (!c.price_high || c.price_high <= 0 || !c.price_low || c.price_low <= 0) {
+              console.warn(`[generate]     価格なしカード除外: ${c.card_name} (price_high=${c.price_high})`);
+              return false;
+            }
+            return true;
+          });
 
         const label = generatedPage.page_label ?? '';
         const isBOX = label === 'BOX' || label.startsWith('BOX-');
@@ -267,17 +332,32 @@ export async function runGenerate() {
         const currentCardBack = (isBOX && cardBackBufferBOX) ? cardBackBufferBOX : cardBackBuffer;
 
         // カード画像のダウンロード
+        const tDl = Date.now();
         const imageUrls = pageCards.map(c => c.image_url || c.alt_image_url || null);
         const imageBuffers = await downloadImagesWithConcurrency(accessToken, imageUrls, 8);
+        const dlMs = Date.now() - tDl;
 
+        let dlOk = 0;
+        let dlFail = 0;
         const cardImageBuffers = new Map<string, Buffer>();
         pageCards.forEach((card, i) => {
           const buf = imageBuffers[i];
-          if (buf) cardImageBuffers.set(card.id, buf);
+          if (buf) {
+            cardImageBuffers.set(card.id, buf);
+            dlOk++;
+          } else {
+            dlFail++;
+            const url = card.image_url || card.alt_image_url || '(なし)';
+            console.warn(`[generate]     画像DL失敗: ${card.card_name} url=${url}`);
+          }
         });
+        if (dlFail > 0) {
+          console.warn(`[generate]     画像DL: ${dlOk}成功 / ${dlFail}失敗 (${dlMs}ms)`);
+        }
 
         // 画像合成
         try {
+          const tCompose = Date.now();
           const imageBuffer = await composePage({
             templateBuffer: currentTemplate,
             cardBackBuffer: currentCardBack,
@@ -293,6 +373,7 @@ export async function runGenerate() {
             rowCardAdjust,
             totalSlots: assetProfile.total_slots,
           });
+          const composeMs = Date.now() - tCompose;
 
           const safeLabel = romanizeLabel(label);
           const storageKey = `generated/${datePath}/${safeFranchise}/page_${pageIdx}_${safeLabel}.png`;
@@ -322,7 +403,7 @@ export async function runGenerate() {
             image_url: publicUrl.publicUrl,
           }).eq('id', generatedPage.id);
 
-          console.log(`[generate]     → 生成完了: ${storageKey}`);
+          console.log(`[generate]     → 生成完了: ${storageKey} (DL=${dlMs}ms, 合成=${composeMs}ms, 計=${Date.now() - tPage}ms)`);
         } catch (composeErr) {
           console.error(`[generate]     → 合成失敗:`, composeErr);
           await supabase.from('generated_page').update({
@@ -348,6 +429,7 @@ export async function runGenerate() {
         () => pageWorker(),
       );
       await Promise.all(workers);
+      console.log(`[generate]   ${franchise} 完了: ${Date.now() - tFranchise}ms`);
     }
 
     // ---- 5. Run 完了更新 ----
@@ -359,7 +441,7 @@ export async function runGenerate() {
     }).eq('id', run.id);
 
     await clearProgress(supabase, run.id);
-    console.log(`[generate] 完了: total_pages=${totalPages}`);
+    console.log(`[generate] 完了: total_pages=${totalPages}, 総時間=${Date.now() - t0}ms`);
 
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
