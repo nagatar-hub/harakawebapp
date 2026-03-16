@@ -53,13 +53,13 @@ export default async function DashboardPage() {
     <div>
       {/* Hero */}
       <div className="mb-14">
-        <h1 className="font-[family-name:var(--font-display)] text-5xl font-bold tracking-tight text-text-primary">Haraka</h1>
-        <p className="text-text-secondary mt-3 text-lg">買取表自動生成</p>
+        <h1 className="font-[family-name:var(--font-display)] text-3xl sm:text-5xl font-bold tracking-tight text-text-primary">Haraka</h1>
+        <p className="text-text-secondary mt-2 sm:mt-3 text-base sm:text-lg">買取表自動生成</p>
       </div>
 
       {/* Stats */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-14">
-        <div className="bg-card-bg border border-border-card rounded-2xl p-8 hover:scale-[1.02] transition-transform duration-300">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 sm:gap-6 mb-8 sm:mb-14">
+        <div className="bg-card-bg border border-border-card rounded-2xl p-5 sm:p-8 hover:scale-[1.02] transition-transform duration-300">
           <p className="text-xs font-bold uppercase tracking-[0.15em] text-text-secondary mb-3">最新ラン</p>
           <hr className="border-border-card mb-5" />
           {run ? (
@@ -74,7 +74,7 @@ export default async function DashboardPage() {
           )}
         </div>
 
-        <div className="bg-card-bg border border-border-card rounded-2xl p-8 hover:scale-[1.02] transition-transform duration-300">
+        <div className="bg-card-bg border border-border-card rounded-2xl p-5 sm:p-8 hover:scale-[1.02] transition-transform duration-300">
           <p className="text-xs font-bold uppercase tracking-[0.15em] text-text-secondary mb-3">統計</p>
           <hr className="border-border-card mb-5" />
           {run ? (
@@ -97,7 +97,7 @@ export default async function DashboardPage() {
           )}
         </div>
 
-        <Link href="/tags" className="bg-card-bg border border-border-card rounded-2xl p-8 hover:scale-[1.02] transition-transform duration-300 group">
+        <Link href="/tags" className="bg-card-bg border border-border-card rounded-2xl p-5 sm:p-8 hover:scale-[1.02] transition-transform duration-300 group">
           <p className="text-xs font-bold uppercase tracking-[0.15em] text-text-secondary mb-3">タグ未設定</p>
           <hr className="border-border-card mb-5" />
           <p className="text-5xl font-black text-text-primary">

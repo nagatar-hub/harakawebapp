@@ -27,7 +27,7 @@ export default async function GalleryPage() {
   return (
     <div>
       <div className="mb-14">
-        <h1 className="page-title text-4xl text-text-primary">ギャラリー</h1>
+        <h1 className="page-title text-2xl sm:text-4xl text-text-primary">ギャラリー</h1>
       </div>
 
       {dates.length === 0 ? (
@@ -40,7 +40,7 @@ export default async function GalleryPage() {
               <Link
                 key={entry.date}
                 href={`/gallery/${entry.date}`}
-                className="bg-card-bg border border-border-card rounded-2xl p-8 hover:scale-[1.02] transition-transform duration-300 flex items-center justify-between"
+                className="bg-card-bg border border-border-card rounded-2xl p-5 sm:p-8 hover:scale-[1.02] transition-transform duration-300 flex items-center justify-between"
               >
                 <div>
                   <p className="text-xl font-bold text-text-primary">{entry.date}</p>

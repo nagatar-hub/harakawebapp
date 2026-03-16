@@ -20,12 +20,12 @@ export function FranchiseTabs({ active, onChange, extraTabs }: Props) {
   const tabs: TabItem[] = [...BASE_TABS, ...(extraTabs ?? [])];
 
   return (
-    <div className="flex gap-1 bg-card-bg border border-border-card p-1.5 rounded-full">
+    <div className="flex gap-0.5 sm:gap-1 bg-card-bg border border-border-card p-1 sm:p-1.5 rounded-full flex-wrap">
       {tabs.map((tab) => (
         <button
           key={tab.key}
           onClick={() => onChange(tab.key)}
-          className={`px-5 py-2 rounded-full text-sm transition-all duration-200 flex items-center gap-1.5 ${
+          className={`px-3 sm:px-5 py-1.5 sm:py-2 rounded-full text-xs sm:text-sm whitespace-nowrap transition-all duration-200 flex items-center gap-1 sm:gap-1.5 ${
             active === tab.key
               ? 'bg-text-primary text-white font-medium shadow-sm'
               : 'text-text-secondary hover:text-text-primary'

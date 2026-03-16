@@ -271,31 +271,31 @@ export default function DbPage() {
 
   return (
     <div>
-      <div className="flex items-center justify-between mb-14">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-8 sm:mb-14">
         <div>
-          <h1 className="page-title text-4xl text-text-primary">DB管理</h1>
-          <p className="text-base text-text-secondary mt-3">
-            全カード: <span className="font-bold text-text-primary">{stats?.total ?? '-'}件</span>
+          <h1 className="page-title text-2xl sm:text-4xl text-text-primary">DB管理</h1>
+          <p className="text-sm sm:text-base text-text-secondary mt-2 sm:mt-3 flex flex-wrap gap-x-3 gap-y-0.5">
+            <span>全カード: <span className="font-bold text-text-primary">{stats?.total ?? '-'}件</span></span>
             {stats?.errorCount ? (
-              <span className="ml-3 text-red-500 font-bold">エラー: {stats.errorCount}件</span>
+              <span className="text-red-500 font-bold">エラー: {stats.errorCount}件</span>
             ) : null}
             {stats?.deadCount ? (
-              <span className="ml-3 text-orange-500 font-bold">リンク切れ: {stats.deadCount}件</span>
+              <span className="text-orange-500 font-bold">リンク切れ: {stats.deadCount}件</span>
             ) : null}
           </p>
-          <div className="flex items-center gap-3 mt-2">
+          <div className="flex flex-wrap items-center gap-2 sm:gap-3 mt-2">
             <button
               type="button"
               onClick={runHealthCheck}
               disabled={healthChecking}
-              className="px-4 py-1.5 text-xs font-medium bg-[#b8a080] text-white rounded-lg hover:bg-[#a08060] disabled:opacity-50 transition-colors"
+              className="px-3 sm:px-4 py-1.5 text-xs font-medium bg-[#b8a080] text-white rounded-lg hover:bg-[#a08060] disabled:opacity-50 transition-colors whitespace-nowrap"
             >
-              {healthChecking ? 'チェック中...' : '画像ヘルスチェック実行'}
+              {healthChecking ? 'チェック中...' : '画像ヘルスチェック'}
             </button>
             {healthResult && (
               <span className="text-xs text-text-secondary">
-                {healthResult.checked}件チェック完了
-                （OK: {healthResult.ok} / リンク切れ: <span className="text-red-500 font-bold">{healthResult.dead}</span>）
+                {healthResult.checked}件完了
+                （OK: {healthResult.ok} / 切れ: <span className="text-red-500 font-bold">{healthResult.dead}</span>）
               </span>
             )}
           </div>
@@ -318,8 +318,8 @@ export default function DbPage() {
           </p>
         </div>
       ) : (
-        <div className="bg-card-bg border border-border-card rounded-2xl overflow-hidden">
-          <table className="w-full text-sm">
+        <div className="bg-card-bg border border-border-card rounded-2xl overflow-x-auto">
+          <table className="w-full text-sm min-w-[640px]">
             <thead>
               <tr className="text-left text-xs font-bold uppercase tracking-[0.15em] text-text-secondary">
                 <th className="px-4 py-5 w-20">画像</th>

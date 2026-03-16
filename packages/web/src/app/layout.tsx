@@ -16,7 +16,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+JP:wght@500;700;900&display=swap" rel="stylesheet" />
       </head>
       <body className="text-text-primary min-h-screen pb-28">
-        <main className="mx-auto max-w-6xl px-6 pt-10 md:px-10">{children}</main>
+        <main className="mx-auto max-w-6xl px-3 sm:px-6 pt-6 sm:pt-10 md:px-10">{children}</main>
         <BottomNav />
       </body>
     </html>

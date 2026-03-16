@@ -434,14 +434,14 @@ export default function RunsPage() {
         </div>
       )}
 
-      <div className="flex items-center justify-between mb-14">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-8 sm:mb-14">
         <div>
-          <h1 className="page-title text-4xl text-text-primary">実行履歴</h1>
+          <h1 className="page-title text-2xl sm:text-4xl text-text-primary whitespace-nowrap">実行履歴</h1>
         </div>
-        <div className="flex gap-3">
+        <div className="flex flex-wrap gap-2 sm:gap-3">
           {hasRunning ? (
             <>
-              <div className="px-5 py-2.5 rounded-full text-sm font-semibold bg-blue-600 text-white flex items-center gap-2">
+              <div className="px-4 sm:px-5 py-2 sm:py-2.5 rounded-full text-xs sm:text-sm font-semibold whitespace-nowrap bg-blue-600 text-white flex items-center gap-2">
                 <span className="inline-block w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
                 {runningRun?.generate_done_at === null && runningRun?.plan_done_at ? '画像生成中...' : '同期実行中...'}
               </div>
@@ -461,7 +461,7 @@ export default function RunsPage() {
                     addToast({ type: 'warning', message: '停止リクエストに失敗しました。' });
                   }
                 }}
-                className="px-5 py-2.5 rounded-full text-sm font-semibold border border-red-300 text-red-700 bg-red-50 hover:bg-red-100 transition-colors"
+                className="px-4 sm:px-5 py-2 sm:py-2.5 rounded-full text-xs sm:text-sm font-semibold whitespace-nowrap border border-red-300 text-red-700 bg-red-50 hover:bg-red-100 transition-colors"
               >
                 ⏹ 強制停止
               </button>
@@ -471,7 +471,7 @@ export default function RunsPage() {
               <button
                 onClick={() => triggerJob('sync')}
                 disabled={triggering !== null}
-                className={`px-5 py-2.5 rounded-full text-sm font-semibold transition-all duration-100 select-none ${
+                className={`px-4 sm:px-5 py-2 sm:py-2.5 rounded-full text-xs sm:text-sm font-semibold whitespace-nowrap transition-all duration-100 select-none ${
                   triggering === 'sync'
                     ? 'bg-blue-600 text-white scale-90 shadow-inner'
                     : triggering !== null
@@ -489,7 +489,7 @@ export default function RunsPage() {
               <button
                 onClick={() => handleGenerateClick()}
                 disabled={triggering !== null || generateConfirmLoading || !hasCompletedSync}
-                className={`px-5 py-2.5 rounded-full text-sm font-semibold transition-all duration-100 select-none ${
+                className={`px-4 sm:px-5 py-2 sm:py-2.5 rounded-full text-xs sm:text-sm font-semibold whitespace-nowrap transition-all duration-100 select-none ${
                   triggering === 'generate' || generateConfirmLoading
                     ? 'bg-blue-600 text-white scale-90 shadow-inner'
                     : triggering !== null || !hasCompletedSync
@@ -522,7 +522,7 @@ export default function RunsPage() {
       ) : (
         <div className="space-y-6">
           {runs.map((run) => (
-            <div key={run.id} className="bg-card-bg border border-border-card rounded-2xl p-8">
+            <div key={run.id} className="bg-card-bg border border-border-card rounded-2xl p-4 sm:p-8">
               <div className="flex items-start justify-between mb-5">
                 <div className="flex items-center gap-3">
                   <span className={`inline-block px-3 py-1 rounded-full text-sm font-semibold border ${STATUS_STYLES[run.status] || 'bg-warm-100 text-warm-500'}`}>
@@ -534,13 +534,13 @@ export default function RunsPage() {
               </div>
 
               {/* Phase progress */}
-              <div className="flex gap-1.5 mb-5">
+              <div className="grid grid-cols-3 sm:flex gap-1.5 mb-5">
                 {PHASES.map((phase) => {
                   const done = !!(run as Record<string, unknown>)[phase.key];
                   return (
                     <div
                       key={phase.key}
-                      className={`flex-1 rounded-lg px-2 py-2 text-xs text-center transition-colors ${
+                      className={`sm:flex-1 rounded-lg px-2 py-2 text-xs text-center whitespace-nowrap transition-colors ${
                         done
                           ? 'bg-[#f3faf0] text-[#2d5a2f] border border-[#bfd4b8]'
                           : run.status === 'running'

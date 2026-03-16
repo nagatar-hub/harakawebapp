@@ -16,7 +16,7 @@ export function BottomNav() {
 
   return (
     <nav className="fixed bottom-6 left-1/2 -translate-x-1/2 z-40">
-      <div className="flex items-center gap-1 bg-card-bg border border-border-card rounded-2xl px-3 py-2.5 shadow-lg">
+      <div className="flex items-center gap-0.5 sm:gap-1 bg-card-bg border border-border-card rounded-2xl px-2 sm:px-3 py-2 sm:py-2.5 shadow-lg">
         {NAV_ITEMS.map((item) => {
           const isActive =
             item.href === '/' ? pathname === '/' : pathname.startsWith(item.href);
@@ -24,7 +24,7 @@ export function BottomNav() {
             <Link
               key={item.href}
               href={item.href}
-              className={`flex flex-col items-center gap-1 px-6 py-2.5 rounded-xl text-sm transition-all duration-200 ${
+              className={`flex flex-col items-center gap-0.5 sm:gap-1 px-3 sm:px-6 py-2 sm:py-2.5 rounded-xl text-xs sm:text-sm transition-all duration-200 whitespace-nowrap ${
                 isActive
                   ? 'bg-text-primary text-white'
                   : 'text-text-secondary hover:text-text-primary hover:bg-border-card/50'

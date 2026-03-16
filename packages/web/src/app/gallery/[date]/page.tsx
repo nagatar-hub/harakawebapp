@@ -170,12 +170,12 @@ export default function GalleryDatePage() {
         </div>
       )}
 
-      <div className="flex items-center justify-between mb-14">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-8 sm:mb-14">
         <div>
           <Link href="/gallery" className="text-sm text-text-secondary hover:text-text-primary transition-colors mb-1 inline-block">&larr; ギャラリー</Link>
-          <h1 className="page-title text-4xl text-text-primary">{date}</h1>
+          <h1 className="page-title text-2xl sm:text-4xl text-text-primary">{date}</h1>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center gap-2 sm:gap-3">
           <FranchiseTabs active={filter} onChange={setFilter} />
           {!selectMode ? (
             <>
@@ -265,7 +265,7 @@ export default function GalleryDatePage() {
                         {FRANCHISE_JA[franchise] || franchise}
                         <span className="text-base text-text-secondary font-normal ml-3">{pages.length}ページ</span>
                       </h2>
-                      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
+                      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-6">
                         {pages.map((page, i) => (
                           <div key={page.id} className={`bg-card-bg border rounded-xl overflow-hidden hover:scale-[1.03] transition-all duration-300 relative ${selectMode && selectedIds.has(page.id) ? 'border-text-primary ring-2 ring-text-primary/30' : 'border-border-card'}`}>
                             {selectMode && (
