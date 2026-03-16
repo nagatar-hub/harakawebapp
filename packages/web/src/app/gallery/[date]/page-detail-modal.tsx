@@ -275,10 +275,17 @@ function CardAddPopup({
         `${API_URL}/api/gallery/cards/search?q=${encodeURIComponent(query)}&franchise=${encodeURIComponent(franchise)}&exclude=${exclude}`
       );
       if (res.ok) {
-        setResults(await res.json());
+        const data = await res.json();
+        setResults(data);
+        if (data.length === 0) {
+          setError('該当するカードが見つかりませんでした');
+        }
+      } else {
+        const errData = await res.json().catch(() => null);
+        setError(errData?.error || `検索エラー (${res.status})`);
       }
-    } catch {
-      setError('検索に失敗しました');
+    } catch (e) {
+      setError(`検索に失敗しました: ${e instanceof Error ? e.message : 'ネットワークエラー'}`);
     }
     setSearching(false);
   }
