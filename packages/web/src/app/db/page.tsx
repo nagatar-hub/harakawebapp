@@ -318,99 +318,169 @@ export default function DbPage() {
           </p>
         </div>
       ) : (
-        <div className="bg-card-bg border border-border-card rounded-2xl overflow-x-auto">
-          <table className="w-full text-sm min-w-[640px]">
-            <thead>
-              <tr className="text-left text-xs font-bold uppercase tracking-[0.15em] text-text-secondary">
-                <th className="px-4 py-5 w-20">画像</th>
-                <th className="px-4 py-5">カード名</th>
-                <th className="px-4 py-5 w-20">グレード</th>
-                <th className="px-4 py-5 w-24">品番</th>
-                <th className="px-4 py-5 w-44">タグ</th>
-                <th className="px-4 py-5 w-48">代替画像URL</th>
-              </tr>
-            </thead>
-            <tbody>
-              {cards.map((card) => (
-                <tr key={card.id} className="border-t border-border-card hover:bg-[#ded5cb] transition-colors">
-                  {/* 画像 + ステータス */}
-                  <td className="px-4 py-3">
-                    <div className="relative">
-                      {card.image_url ? (
-                        <img
-                          src={card.image_url}
-                          alt=""
-                          className={`w-14 h-[78px] object-cover rounded-lg ${card.image_status === 'dead' ? 'opacity-40 border-2 border-red-400' : ''}`}
-                          onError={(e) => {
-                            if (card.alt_image_url && (e.target as HTMLImageElement).src !== card.alt_image_url) {
-                              (e.target as HTMLImageElement).src = card.alt_image_url;
-                            }
-                          }}
-                        />
-                      ) : (
-                        <div className="w-14 h-[78px] bg-red-50 border border-red-200 rounded-lg flex items-center justify-center">
-                          <span className="text-red-400 text-xs">なし</span>
-                        </div>
-                      )}
-                      {card.image_status === 'dead' && (
-                        <span className="absolute -top-1 -right-1 bg-red-500 text-white text-[9px] font-bold px-1 rounded" title="リンク切れ">
-                          DEAD
-                        </span>
-                      )}
-                      {card.image_status === 'ok' && (
-                        <span className="absolute -top-1 -right-1 bg-green-500 text-white text-[9px] font-bold px-1 rounded" title="OK">
-                          OK
-                        </span>
-                      )}
-                    </div>
-                  </td>
-
-                  {/* カード名 + フランチャイズ */}
-                  <td className="px-4 py-3">
-                    <p className="font-semibold text-text-primary text-sm">{card.card_name}</p>
-                    <p className="text-xs text-text-secondary mt-0.5">
-                      {FRANCHISE_JA[card.franchise] || card.franchise}
-                    </p>
-                  </td>
-
-                  {/* グレード */}
-                  <td className="px-4 py-3 text-text-secondary text-sm">{card.grade || '-'}</td>
-
-                  {/* 品番 */}
-                  <td className="px-4 py-3 text-text-secondary text-sm">{card.list_no || '-'}</td>
-
-                  {/* タグ（プルダウン選択） */}
-                  <td className="px-4 py-3">
-                    <TagSelectCell
-                      value={card.tag || ''}
-                      options={getTagOptionsForCard(card.franchise)}
-                      onSave={(v) => updateCard(card.id, 'tag', v)}
-                    />
-                  </td>
-
-                  {/* 代替画像URL（インライン編集） */}
-                  <td className="px-4 py-3">
-                    <InlineEditCell
-                      value={card.alt_image_url || ''}
-                      placeholder="URL を入力"
-                      onSave={(v) => updateCard(card.id, 'alt_image_url', v)}
-                      renderDisplay={(v) =>
-                        v ? (
-                          <span className="text-green-600 text-xs font-medium truncate block max-w-[160px]" title={v}>
-                            {v}
-                          </span>
-                        ) : (
-                          <span className="text-text-secondary text-xs italic">未設定</span>
-                        )
-                      }
-                    />
-                  </td>
-
+        <>
+          {/* Desktop: テーブル表示 */}
+          <div className="hidden sm:block bg-card-bg border border-border-card rounded-2xl">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="text-left text-xs font-bold uppercase tracking-[0.15em] text-text-secondary">
+                  <th className="px-4 py-5 w-20">画像</th>
+                  <th className="px-4 py-5">カード名</th>
+                  <th className="px-4 py-5 w-20">グレード</th>
+                  <th className="px-4 py-5 w-24">品番</th>
+                  <th className="px-4 py-5 w-44">タグ</th>
+                  <th className="px-4 py-5 w-48">代替画像URL</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+              </thead>
+              <tbody>
+                {cards.map((card) => (
+                  <tr key={card.id} className="border-t border-border-card hover:bg-[#ded5cb] transition-colors">
+                    <td className="px-4 py-3">
+                      <div className="relative">
+                        {card.image_url ? (
+                          <img
+                            src={card.image_url}
+                            alt=""
+                            className={`w-14 h-[78px] object-cover rounded-lg ${card.image_status === 'dead' ? 'opacity-40 border-2 border-red-400' : ''}`}
+                            onError={(e) => {
+                              if (card.alt_image_url && (e.target as HTMLImageElement).src !== card.alt_image_url) {
+                                (e.target as HTMLImageElement).src = card.alt_image_url;
+                              }
+                            }}
+                          />
+                        ) : (
+                          <div className="w-14 h-[78px] bg-red-50 border border-red-200 rounded-lg flex items-center justify-center">
+                            <span className="text-red-400 text-xs">なし</span>
+                          </div>
+                        )}
+                        {card.image_status === 'dead' && (
+                          <span className="absolute -top-1 -right-1 bg-red-500 text-white text-[9px] font-bold px-1 rounded" title="リンク切れ">
+                            DEAD
+                          </span>
+                        )}
+                        {card.image_status === 'ok' && (
+                          <span className="absolute -top-1 -right-1 bg-green-500 text-white text-[9px] font-bold px-1 rounded" title="OK">
+                            OK
+                          </span>
+                        )}
+                      </div>
+                    </td>
+                    <td className="px-4 py-3">
+                      <p className="font-semibold text-text-primary text-sm">{card.card_name}</p>
+                      <p className="text-xs text-text-secondary mt-0.5">
+                        {FRANCHISE_JA[card.franchise] || card.franchise}
+                      </p>
+                    </td>
+                    <td className="px-4 py-3 text-text-secondary text-sm">{card.grade || '-'}</td>
+                    <td className="px-4 py-3 text-text-secondary text-sm">{card.list_no || '-'}</td>
+                    <td className="px-4 py-3">
+                      <TagSelectCell
+                        value={card.tag || ''}
+                        options={getTagOptionsForCard(card.franchise)}
+                        onSave={(v) => updateCard(card.id, 'tag', v)}
+                      />
+                    </td>
+                    <td className="px-4 py-3">
+                      <InlineEditCell
+                        value={card.alt_image_url || ''}
+                        placeholder="URL を入力"
+                        onSave={(v) => updateCard(card.id, 'alt_image_url', v)}
+                        renderDisplay={(v) =>
+                          v ? (
+                            <span className="text-green-600 text-xs font-medium truncate block max-w-[160px]" title={v}>
+                              {v}
+                            </span>
+                          ) : (
+                            <span className="text-text-secondary text-xs italic">未設定</span>
+                          )
+                        }
+                      />
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          {/* Mobile: カード表示 */}
+          <div className="sm:hidden space-y-2">
+            {cards.map((card) => (
+              <div key={card.id} className="bg-card-bg border border-border-card rounded-xl p-3">
+                <div className="flex gap-3">
+                  {/* サムネイル + ステータス */}
+                  <div className="relative flex-shrink-0">
+                    {card.image_url ? (
+                      <img
+                        src={card.image_url}
+                        alt=""
+                        className={`w-12 h-[68px] object-cover rounded-lg ${card.image_status === 'dead' ? 'opacity-40 border-2 border-red-400' : ''}`}
+                        onError={(e) => {
+                          if (card.alt_image_url && (e.target as HTMLImageElement).src !== card.alt_image_url) {
+                            (e.target as HTMLImageElement).src = card.alt_image_url;
+                          }
+                        }}
+                      />
+                    ) : (
+                      <div className="w-12 h-[68px] bg-red-50 border border-red-200 rounded-lg flex items-center justify-center">
+                        <span className="text-red-400 text-[10px]">なし</span>
+                      </div>
+                    )}
+                    {card.image_status === 'dead' && (
+                      <span className="absolute -top-1 -right-1 bg-red-500 text-white text-[8px] font-bold px-1 rounded">
+                        DEAD
+                      </span>
+                    )}
+                    {card.image_status === 'ok' && (
+                      <span className="absolute -top-1 -right-1 bg-green-500 text-white text-[8px] font-bold px-1 rounded">
+                        OK
+                      </span>
+                    )}
+                  </div>
+
+                  {/* カード情報 */}
+                  <div className="flex-1 min-w-0">
+                    <p className="font-semibold text-text-primary text-sm truncate">{card.card_name}</p>
+                    <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 mt-0.5">
+                      <span className="text-[11px] text-text-secondary">{FRANCHISE_JA[card.franchise] || card.franchise}</span>
+                      {card.grade && <span className="text-[11px] text-text-secondary">| {card.grade}</span>}
+                      {card.list_no && <span className="text-[11px] text-text-secondary">| {card.list_no}</span>}
+                    </div>
+
+                    {/* タグ */}
+                    <div className="mt-1.5">
+                      <TagSelectCell
+                        value={card.tag || ''}
+                        options={getTagOptionsForCard(card.franchise)}
+                        onSave={(v) => updateCard(card.id, 'tag', v)}
+                      />
+                    </div>
+
+                    {/* 代替画像URL */}
+                    {(card.image_status === 'dead' || card.alt_image_url) && (
+                      <div className="mt-1">
+                        <span className="text-[10px] text-text-secondary">代替URL: </span>
+                        <InlineEditCell
+                          value={card.alt_image_url || ''}
+                          placeholder="URL を入力"
+                          onSave={(v) => updateCard(card.id, 'alt_image_url', v)}
+                          renderDisplay={(v) =>
+                            v ? (
+                              <span className="text-green-600 text-[11px] font-medium truncate block" title={v}>
+                                {v}
+                              </span>
+                            ) : (
+                              <span className="text-text-secondary text-[11px] italic">未設定</span>
+                            )
+                          }
+                        />
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </>
       )}
     </div>
   );
