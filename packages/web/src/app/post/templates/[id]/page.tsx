@@ -22,16 +22,21 @@ type Template = {
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080';
 
 function resolvePreview(template: string, variables: Variable[]): string {
+  const now = new Date();
+  const mm = String(now.getMonth() + 1).padStart(2, '0');
+  const dd = String(now.getDate()).padStart(2, '0');
+  const yyyy = now.getFullYear();
+  const weekdays = ['日', '月', '火', '水', '木', '金', '土'];
   const sampleValues: Record<string, string> = {
-    date: '2026/03/12',
-    date_short: '03/12',
+    date: `${yyyy}/${mm}/${dd}`,
+    date_short: `${mm}/${dd}`,
     franchise: 'ポケモン',
     franchise_en: 'Pokemon',
     page_count: '5',
     page_no: '1',
     page_title: 'TOP①',
     card_count: '12',
-    weekday: '木',
+    weekday: weekdays[now.getDay()],
   };
   return template.replace(/\{\{(\w+)\}\}/g, (match, key) => {
     return sampleValues[key] ?? `[${key}]`;
