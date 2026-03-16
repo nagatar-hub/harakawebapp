@@ -179,7 +179,7 @@ export function ImageModal({ images, currentIndex, onClose, onNavigate }: Props)
           {current.image_url && (
             <img
               ref={imgRef}
-              src={current.image_url}
+              src={`${current.image_url}?t=${Date.now()}`}
               alt={current.page_label || ''}
               className="max-h-[80vh] w-auto rounded shadow-2xl select-none"
               draggable={false}
