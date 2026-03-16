@@ -6,7 +6,7 @@ import Link from 'next/link';
 import { FranchiseTabs } from '@/components/franchise-tabs';
 import { ImageModal } from '@/components/image-modal';
 import { PageDetailModal } from './page-detail-modal';
-import { shareOrDownloadImages } from '@/lib/download-images';
+import { fetchImagesAsFiles, shareFiles, downloadFilesAsZip, isShareSupported } from '@/lib/download-images';
 import type { DownloadableImage } from '@/lib/download-images';
 
 type PageImage = {
@@ -42,6 +42,8 @@ export default function GalleryDatePage() {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [downloading, setDownloading] = useState(false);
   const [dlProgress, setDlProgress] = useState({ current: 0, total: 0 });
+  const [readyFiles, setReadyFiles] = useState<File[] | null>(null);
+  const [readyZipName, setReadyZipName] = useState('');
 
   useEffect(() => {
     async function load() {
@@ -112,35 +114,65 @@ export default function GalleryDatePage() {
   async function handleBulkDownload() {
     const list = buildDownloadList(allFiltered);
     if (list.length === 0) return;
-    // 最新runの実行時刻を取得
-    const latestRun = runGroups[0];
-    const runTime = latestRun ? formatTime(latestRun[1].started_at) : '';
-    const ok = window.confirm(`${date} ${runTime} の実行分（${list.length}枚）をダウンロードします。\nよろしいですか？`);
-    if (!ok) return;
     setDownloading(true);
     setDlProgress({ current: 0, total: list.length });
-    try {
-      await shareOrDownloadImages(list, `haraka_${date}.zip`, (cur, total) => setDlProgress({ current: cur, total }));
-    } finally {
-      setDownloading(false);
+    const files = await fetchImagesAsFiles(list, (cur, total) => setDlProgress({ current: cur, total }));
+    if (files.length === 0) { setDownloading(false); return; }
+    // Web Share対応 → 「共有する」ボタン表示待ち
+    if (isShareSupported()) {
+      setReadyFiles(files);
+      setReadyZipName(`haraka_${date}.zip`);
+      return; // overlayで共有/ZIPボタン表示
     }
+    // 非対応 → 直接ZIP
+    await downloadFilesAsZip(files, `haraka_${date}.zip`);
+    setDownloading(false);
   }
 
   async function handleSelectedDownload() {
     const selected = allFiltered.filter(p => selectedIds.has(p.id));
     const list = buildDownloadList(selected);
     if (list.length === 0) return;
-    const ok = window.confirm(`選択した${list.length}枚をダウンロードします。\nよろしいですか？`);
-    if (!ok) return;
     setDownloading(true);
     setDlProgress({ current: 0, total: list.length });
-    try {
-      await shareOrDownloadImages(list, `haraka_${date}_selected.zip`, (cur, total) => setDlProgress({ current: cur, total }));
-    } finally {
-      setDownloading(false);
-      setSelectMode(false);
-      setSelectedIds(new Set());
+    const files = await fetchImagesAsFiles(list, (cur, total) => setDlProgress({ current: cur, total }));
+    if (files.length === 0) { setDownloading(false); return; }
+    if (isShareSupported()) {
+      setReadyFiles(files);
+      setReadyZipName(`haraka_${date}_selected.zip`);
+      return;
     }
+    await downloadFilesAsZip(files, `haraka_${date}_selected.zip`);
+    setDownloading(false);
+    setSelectMode(false);
+    setSelectedIds(new Set());
+  }
+
+  async function handleShare() {
+    if (!readyFiles) return;
+    const shared = await shareFiles(readyFiles);
+    if (!shared) {
+      // 共有失敗 → ZIPフォールバック
+      await downloadFilesAsZip(readyFiles, readyZipName);
+    }
+    setReadyFiles(null);
+    setDownloading(false);
+    setSelectMode(false);
+    setSelectedIds(new Set());
+  }
+
+  async function handleZipFallback() {
+    if (!readyFiles) return;
+    await downloadFilesAsZip(readyFiles, readyZipName);
+    setReadyFiles(null);
+    setDownloading(false);
+    setSelectMode(false);
+    setSelectedIds(new Set());
+  }
+
+  function handleDlCancel() {
+    setReadyFiles(null);
+    setDownloading(false);
   }
 
   function toggleSelect(id: string) {
@@ -154,18 +186,47 @@ export default function GalleryDatePage() {
 
   return (
     <div>
-      {/* Download progress overlay */}
+      {/* Download progress / share overlay */}
       {downloading && (
         <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 backdrop-blur-sm">
           <div className="bg-card-bg border border-border-card rounded-2xl shadow-2xl p-8 w-80">
-            <p className="text-sm font-semibold text-text-primary mb-3">ダウンロード中...</p>
-            <div className="w-full bg-warm-100 rounded-full h-2 overflow-hidden mb-2">
-              <div
-                className="bg-text-primary h-2 rounded-full transition-all duration-300"
-                style={{ width: `${dlProgress.total > 0 ? Math.round((dlProgress.current / dlProgress.total) * 100) : 0}%` }}
-              />
-            </div>
-            <p className="text-xs text-text-secondary text-right">{dlProgress.current}/{dlProgress.total}</p>
+            {readyFiles ? (
+              <>
+                <p className="text-sm font-semibold text-text-primary mb-1">準備完了！</p>
+                <p className="text-xs text-text-secondary mb-4">{readyFiles.length}枚の画像</p>
+                <div className="space-y-2">
+                  <button
+                    onClick={handleShare}
+                    className="w-full py-2.5 rounded-xl text-sm font-semibold bg-text-primary text-white hover:opacity-90 transition-opacity"
+                  >
+                    共有する（写真に保存）
+                  </button>
+                  <button
+                    onClick={handleZipFallback}
+                    className="w-full py-2.5 rounded-xl text-sm font-medium border border-border-card text-text-secondary hover:bg-warm-100 transition-colors"
+                  >
+                    ZIPでダウンロード
+                  </button>
+                  <button
+                    onClick={handleDlCancel}
+                    className="w-full py-2 rounded-xl text-xs text-text-secondary hover:text-text-primary transition-colors"
+                  >
+                    キャンセル
+                  </button>
+                </div>
+              </>
+            ) : (
+              <>
+                <p className="text-sm font-semibold text-text-primary mb-3">画像を準備中...</p>
+                <div className="w-full bg-warm-100 rounded-full h-2 overflow-hidden mb-2">
+                  <div
+                    className="bg-text-primary h-2 rounded-full transition-all duration-300"
+                    style={{ width: `${dlProgress.total > 0 ? Math.round((dlProgress.current / dlProgress.total) * 100) : 0}%` }}
+                  />
+                </div>
+                <p className="text-xs text-text-secondary text-right">{dlProgress.current}/{dlProgress.total}</p>
+              </>
+            )}
           </div>
         </div>
       )}

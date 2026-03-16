@@ -5,8 +5,8 @@ export type DownloadableImage = {
   filename: string;
 };
 
-/** Web Share API が使えるかどうか（ダミーファイルで判定） */
-function isShareSupported(): boolean {
+/** Web Share API が使えるかどうか */
+export function isShareSupported(): boolean {
   if (typeof navigator === 'undefined') return false;
   if (typeof navigator.share !== 'function') return false;
   if (typeof navigator.canShare !== 'function') return false;
@@ -14,77 +14,86 @@ function isShareSupported(): boolean {
   return navigator.canShare({ files: [dummy] });
 }
 
-/** 少数枚（≤3）かつWeb Share対応なら共有、それ以外はZIP */
-export async function shareOrDownloadImages(
+/**
+ * 画像をfetchしてFile[]として返す（共有/ZIP用の前準備）
+ */
+export async function fetchImagesAsFiles(
   images: DownloadableImage[],
-  zipFilename: string,
   onProgress?: (current: number, total: number) => void,
-): Promise<void> {
-  const useShare = isShareSupported() && images.length <= 3;
-
-  // 画像をfetch
-  const blobs: { blob: Blob; filename: string }[] = [];
+): Promise<File[]> {
+  const files: File[] = [];
   for (let i = 0; i < images.length; i++) {
     onProgress?.(i, images.length);
     try {
       const res = await fetch(images[i].image_url);
       if (!res.ok) continue;
       const blob = await res.blob();
-      blobs.push({ blob, filename: images[i].filename });
+      files.push(new File([blob], images[i].filename, { type: blob.type || 'image/png' }));
     } catch {
       // skip
     }
   }
   onProgress?.(images.length, images.length);
+  return files;
+}
 
-  if (blobs.length === 0) return;
-
-  if (useShare) {
-    const files = blobs.map(b => new File([b.blob], b.filename, { type: b.blob.type || 'image/png' }));
-    try {
-      await navigator.share({ files });
-      return;
-    } catch (e) {
-      if (e instanceof Error && e.name === 'AbortError') return;
-      // share失敗 → ZIPフォールバック
-    }
+/**
+ * File[]をWeb Share APIで共有（ユーザーアクション直下で呼ぶこと）
+ * 成功したらtrue、失敗/非対応ならfalse
+ */
+export async function shareFiles(files: File[]): Promise<boolean> {
+  if (!isShareSupported() || files.length === 0) return false;
+  try {
+    await navigator.share({ files });
+    return true;
+  } catch (e) {
+    if (e instanceof Error && e.name === 'AbortError') return true; // キャンセルもOK扱い
+    return false;
   }
+}
 
-  // ZIP
+/**
+ * File[]をZIPにしてダウンロード
+ */
+export async function downloadFilesAsZip(files: File[], zipFilename: string): Promise<void> {
   const zip = new JSZip();
-  for (const b of blobs) {
-    zip.file(b.filename, b.blob);
+  for (const file of files) {
+    zip.file(file.name, file);
   }
   const content = await zip.generateAsync({ type: 'blob' });
   triggerDownload(content, zipFilename);
 }
 
 /**
- * 複数画像をZIPファイルとしてダウンロード（従来互換）
+ * 従来互換: fetchしてそのままZIPダウンロード
  */
 export async function downloadImagesAsZip(
   images: DownloadableImage[],
   zipFilename: string,
   onProgress?: (current: number, total: number) => void,
 ): Promise<void> {
-  const zip = new JSZip();
+  const files = await fetchImagesAsFiles(images, onProgress);
+  if (files.length === 0) return;
+  await downloadFilesAsZip(files, zipFilename);
+}
 
-  for (let i = 0; i < images.length; i++) {
-    onProgress?.(i, images.length);
-    try {
-      const res = await fetch(images[i].image_url);
-      if (!res.ok) continue;
-      const blob = await res.blob();
-      zip.file(images[i].filename, blob);
-    } catch {
-      // skip failed images
-    }
+/**
+ * 従来互換: fetchして共有 or ZIP
+ */
+export async function shareOrDownloadImages(
+  images: DownloadableImage[],
+  zipFilename: string,
+  onProgress?: (current: number, total: number) => void,
+): Promise<void> {
+  const files = await fetchImagesAsFiles(images, onProgress);
+  if (files.length === 0) return;
+
+  if (isShareSupported() && images.length <= 3) {
+    const shared = await shareFiles(files);
+    if (shared) return;
   }
 
-  onProgress?.(images.length, images.length);
-
-  const content = await zip.generateAsync({ type: 'blob' });
-  triggerDownload(content, zipFilename);
+  await downloadFilesAsZip(files, zipFilename);
 }
 
 /**
@@ -95,15 +104,10 @@ export async function downloadSingleImage(url: string, filename: string): Promis
   if (!res.ok) throw new Error('Failed to fetch image');
   const blob = await res.blob();
 
-  // Web Share API 対応なら共有メニュー
   if (isShareSupported()) {
     const file = new File([blob], filename, { type: blob.type || 'image/png' });
-    try {
-      await navigator.share({ files: [file] });
-      return;
-    } catch (e) {
-      if (e instanceof Error && e.name === 'AbortError') return;
-    }
+    const shared = await shareFiles([file]);
+    if (shared) return;
   }
 
   triggerDownload(blob, filename);
