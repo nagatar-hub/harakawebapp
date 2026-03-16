@@ -192,6 +192,7 @@ export default function DbPage() {
   const [healthChecking, setHealthChecking] = useState(false);
   const [healthResult, setHealthResult] = useState<{ checked: number; ok: number; dead: number } | null>(null);
   const [previewCard, setPreviewCard] = useState<DbCard | null>(null);
+  const [sortBy, setSortBy] = useState<'default' | 'tag' | 'tag-desc'>('default');
 
   const isErrorTab = filter === 'error';
 
@@ -270,6 +271,28 @@ export default function DbPage() {
     return tagOptions[franchise] || [];
   };
 
+  /** ソート済みカード */
+  const sortedCards = (() => {
+    if (sortBy === 'default') return cards;
+    const sorted = [...cards].sort((a, b) => {
+      const tagA = a.tag || '';
+      const tagB = b.tag || '';
+      if (!tagA && !tagB) return 0;
+      if (!tagA) return 1;  // タグなしは後ろ
+      if (!tagB) return -1;
+      return sortBy === 'tag' ? tagA.localeCompare(tagB) : tagB.localeCompare(tagA);
+    });
+    return sorted;
+  })();
+
+  function cycleSortBy() {
+    setSortBy(prev => {
+      if (prev === 'default') return 'tag';
+      if (prev === 'tag') return 'tag-desc';
+      return 'default';
+    });
+  }
+
   return (
     <div>
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-8 sm:mb-14">
@@ -292,6 +315,17 @@ export default function DbPage() {
               className="px-3 sm:px-4 py-1.5 text-xs font-medium bg-[#b8a080] text-white rounded-lg hover:bg-[#a08060] disabled:opacity-50 transition-colors whitespace-nowrap"
             >
               {healthChecking ? 'チェック中...' : '画像ヘルスチェック'}
+            </button>
+            <button
+              type="button"
+              onClick={cycleSortBy}
+              className={`px-3 sm:px-4 py-1.5 text-xs font-medium rounded-lg border transition-colors whitespace-nowrap ${
+                sortBy !== 'default'
+                  ? 'bg-text-primary/10 border-text-primary/30 text-text-primary'
+                  : 'border-border-card text-text-secondary hover:bg-warm-100'
+              }`}
+            >
+              タグ順 {sortBy === 'tag' ? '↑' : sortBy === 'tag-desc' ? '↓' : ''}
             </button>
             {healthResult && (
               <span className="text-xs text-text-secondary">
@@ -334,7 +368,7 @@ export default function DbPage() {
                 </tr>
               </thead>
               <tbody>
-                {cards.map((card) => (
+                {sortedCards.map((card) => (
                   <tr key={card.id} className="border-t border-border-card hover:bg-[#ded5cb] transition-colors">
                     <td className="px-4 py-3">
                       <div className="relative">
@@ -405,7 +439,7 @@ export default function DbPage() {
 
           {/* Mobile: カード表示 */}
           <div className="sm:hidden space-y-2">
-            {cards.map((card) => (
+            {sortedCards.map((card) => (
               <div
                 key={card.id}
                 className="bg-card-bg border border-border-card rounded-xl p-3 active:bg-[#ded5cb] transition-colors cursor-pointer"
@@ -498,13 +532,13 @@ export default function DbPage() {
             className="bg-card-bg w-full sm:max-w-md sm:rounded-2xl rounded-t-2xl max-h-[85vh] flex flex-col"
             onClick={(e) => e.stopPropagation()}
           >
-            {/* 画像（高さ制限して下の情報が見えるように） */}
-            <div className="relative bg-background flex-shrink-0 max-h-[45vh] overflow-hidden flex items-center justify-center rounded-t-2xl sm:rounded-t-2xl">
+            {/* 画像（高さ制限、全体が収まるように表示） */}
+            <div className="relative bg-background flex-shrink-0 flex items-center justify-center rounded-t-2xl sm:rounded-t-2xl">
               {(previewCard.image_url || previewCard.alt_image_url) ? (
                 <img
                   src={previewCard.alt_image_url || previewCard.image_url || ''}
                   alt={previewCard.card_name}
-                  className="w-full h-full object-contain"
+                  className="max-w-full max-h-[45vh] object-contain"
                   onError={(e) => {
                     if (previewCard.image_url && (e.target as HTMLImageElement).src !== previewCard.image_url) {
                       (e.target as HTMLImageElement).src = previewCard.image_url;
