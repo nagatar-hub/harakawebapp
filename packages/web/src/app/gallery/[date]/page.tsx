@@ -6,7 +6,7 @@ import Link from 'next/link';
 import { FranchiseTabs } from '@/components/franchise-tabs';
 import { ImageModal } from '@/components/image-modal';
 import { PageDetailModal } from './page-detail-modal';
-import { downloadImagesAsZip } from '@/lib/download-images';
+import { shareOrDownloadImages } from '@/lib/download-images';
 import type { DownloadableImage } from '@/lib/download-images';
 
 type PageImage = {
@@ -120,7 +120,7 @@ export default function GalleryDatePage() {
     setDownloading(true);
     setDlProgress({ current: 0, total: list.length });
     try {
-      await downloadImagesAsZip(list, `haraka_${date}.zip`, (cur, total) => setDlProgress({ current: cur, total }));
+      await shareOrDownloadImages(list, `haraka_${date}.zip`, (cur, total) => setDlProgress({ current: cur, total }));
     } finally {
       setDownloading(false);
     }

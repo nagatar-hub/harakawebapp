@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useCallback, useRef } from 'react';
 import Link from 'next/link';
-import { downloadImagesAsZip } from '@/lib/download-images';
+import { shareOrDownloadImages } from '@/lib/download-images';
 import type { DownloadableImage } from '@/lib/download-images';
 
 type Run = {
@@ -276,7 +276,7 @@ export default function RunsPage() {
       }));
       if (list.length === 0) return;
       setDlProgress({ current: 0, total: list.length });
-      await downloadImagesAsZip(list, `haraka_${dateStr}.zip`, (cur, total) => setDlProgress({ current: cur, total }));
+      await shareOrDownloadImages(list, `haraka_${dateStr}.zip`, (cur, total) => setDlProgress({ current: cur, total }));
     } finally {
       setDownloadingRunId(null);
     }
