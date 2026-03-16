@@ -242,10 +242,12 @@ function SortableRow({
   card,
   idx,
   onClick,
+  onDelete,
 }: {
   card: CardDetail;
   idx: number;
   onClick: () => void;
+  onDelete: () => void;
 }) {
   const {
     attributes,
@@ -324,6 +326,15 @@ function SortableRow({
         ) : (
           <span className="text-xs text-text-secondary">OK</span>
         )}
+      </td>
+      <td className="py-2 pl-2">
+        <button
+          onClick={(e) => { e.stopPropagation(); onDelete(); }}
+          className="w-6 h-6 rounded-full text-warm-400 hover:text-red-500 hover:bg-red-50 flex items-center justify-center text-sm transition-colors"
+          title="このカードをページから削除"
+        >
+          ×
+        </button>
       </td>
     </tr>
   );
@@ -453,6 +464,25 @@ export function PageDetailModal({
     }
   }
 
+  async function handleDeleteCard(cardId: string) {
+    if (!confirm('このカードをページから削除しますか？')) return;
+    try {
+      const res = await fetch(`${API_URL}/api/gallery/pages/${pageId}/cards/${cardId}`, {
+        method: 'DELETE',
+      });
+      if (res.ok) {
+        setCards(prev => prev.filter(c => c.id !== cardId));
+        setMessage({ type: 'success', text: 'カードを削除しました' });
+        setTimeout(() => setMessage(null), 3000);
+      } else {
+        const err = await res.json();
+        setMessage({ type: 'error', text: err.error || '削除に失敗しました' });
+      }
+    } catch {
+      setMessage({ type: 'error', text: 'ネットワークエラー' });
+    }
+  }
+
   const editingCard = editingCardId ? cards.find(c => c.id === editingCardId) : null;
 
   return (
@@ -545,6 +575,7 @@ export function PageDetailModal({
                           <th className="pb-2 pr-2 text-right">価格(高)</th>
                           <th className="pb-2 pr-2 text-right">価格(低)</th>
                           <th className="pb-2">状態</th>
+                          <th className="pb-2 w-8"></th>
                         </tr>
                       </thead>
                       <SortableContext
@@ -558,6 +589,7 @@ export function PageDetailModal({
                               card={card}
                               idx={idx}
                               onClick={() => setEditingCardId(card.id)}
+                              onDelete={() => handleDeleteCard(card.id)}
                             />
                           ))}
                         </tbody>

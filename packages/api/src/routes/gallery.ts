@@ -209,6 +209,36 @@ galleryRoutes.put('/gallery/pages/:pageId/reorder', async (c) => {
   return c.json({ status: 'ok', cardIds });
 });
 
+/** ページからカード削除 */
+galleryRoutes.delete('/gallery/pages/:pageId/cards/:cardId', async (c) => {
+  const { pageId, cardId } = c.req.param();
+  const supabase = createSupabaseClient();
+
+  const { data: page, error: pageErr } = await supabase
+    .from('generated_page')
+    .select('card_ids')
+    .eq('id', pageId)
+    .single();
+
+  if (pageErr || !page) return c.json({ error: 'Page not found' }, 404);
+
+  const currentIds = (page as Record<string, unknown>).card_ids as string[] || [];
+  if (!currentIds.includes(cardId)) {
+    return c.json({ error: 'Card not found in this page' }, 404);
+  }
+
+  const newIds = currentIds.filter(id => id !== cardId);
+
+  const { error } = await supabase
+    .from('generated_page')
+    .update({ card_ids: newIds })
+    .eq('id', pageId);
+
+  if (error) return c.json({ error: error.message }, 500);
+
+  return c.json({ status: 'ok', remaining: newIds.length });
+});
+
 /** 単一ページ再生成 */
 galleryRoutes.post('/gallery/pages/:pageId/regenerate', async (c) => {
   const pageId = c.req.param('pageId');
@@ -228,7 +258,7 @@ galleryRoutes.post('/gallery/pages/:pageId/regenerate', async (c) => {
 
   const child = fork(jobEntry, [], {
     detached: true,
-    stdio: 'ignore',
+    stdio: 'inherit',
     env: { ...process.env, JOB_NAME: 'regenerate-page', PAGE_ID: pageId },
   });
   child.unref();
