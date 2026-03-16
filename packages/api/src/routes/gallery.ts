@@ -270,16 +270,25 @@ galleryRoutes.post('/gallery/pages/:pageId/cards', async (c) => {
     // 手動追加: prepared_card にレコード作成
     if (!body.card_name) return c.json({ error: 'card_name は必須です' }, 400);
 
-    const { data: newCard, error: insertErr } = await supabase
-      .from('prepared_card')
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { data: newCard, error: insertErr } = await (supabase
+      .from('prepared_card') as any)
       .insert({
         franchise: (page as Record<string, unknown>).franchise || body.franchise || 'Pokemon',
         card_name: body.card_name,
         tag: body.tag || null,
-        price_high: body.price_high || null,
-        price_low: body.price_low || null,
+        price_high: body.price_high ?? null,
+        price_low: body.price_low ?? null,
         image_url: body.image_url || null,
-        run_id: null,
+        alt_image_url: null,
+        run_id: 'manual',
+        raw_import_id: null,
+        grade: null,
+        list_no: null,
+        rarity: null,
+        rarity_icon_url: null,
+        image_status: 'unchecked',
+        source: 'manual',
       })
       .select('id')
       .single();
@@ -287,6 +296,8 @@ galleryRoutes.post('/gallery/pages/:pageId/cards', async (c) => {
     if (insertErr || !newCard) return c.json({ error: `カード作成失敗: ${insertErr?.message}` }, 500);
     cardId = newCard.id;
   }
+
+  if (!cardId) return c.json({ error: 'カードIDが不明です' }, 500);
 
   if (currentIds.includes(cardId)) {
     return c.json({ error: 'このカードは既にページに含まれています' }, 400);
