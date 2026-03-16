@@ -192,7 +192,7 @@ export default function DbPage() {
   const [healthChecking, setHealthChecking] = useState(false);
   const [healthResult, setHealthResult] = useState<{ checked: number; ok: number; dead: number } | null>(null);
   const [previewCard, setPreviewCard] = useState<DbCard | null>(null);
-  const [sortBy, setSortBy] = useState<'default' | 'tag' | 'tag-desc'>('default');
+  const [filterTag, setFilterTag] = useState<string | null>(null);
 
   const isErrorTab = filter === 'error';
 
@@ -271,27 +271,22 @@ export default function DbPage() {
     return tagOptions[franchise] || [];
   };
 
-  /** ソート済みカード */
-  const sortedCards = (() => {
-    if (sortBy === 'default') return cards;
-    const sorted = [...cards].sort((a, b) => {
-      const tagA = a.tag || '';
-      const tagB = b.tag || '';
-      if (!tagA && !tagB) return 0;
-      if (!tagA) return 1;  // タグなしは後ろ
-      if (!tagB) return -1;
-      return sortBy === 'tag' ? tagA.localeCompare(tagB) : tagB.localeCompare(tagA);
-    });
-    return sorted;
+  /** 現在のカード一覧から使われているタグを抽出 */
+  const availableTags = (() => {
+    const tags = new Set<string>();
+    cards.forEach((c) => { if (c.tag) tags.add(c.tag); });
+    return Array.from(tags).sort((a, b) => a.localeCompare(b));
   })();
 
-  function cycleSortBy() {
-    setSortBy(prev => {
-      if (prev === 'default') return 'tag';
-      if (prev === 'tag') return 'tag-desc';
-      return 'default';
-    });
-  }
+  /** タグ絞り込み済みカード */
+  const filteredCards = filterTag
+    ? cards.filter((c) => c.tag === filterTag)
+    : cards;
+
+  // フランチャイズタブ変更時にタグフィルターをリセット
+  useEffect(() => {
+    setFilterTag(null);
+  }, [filter]);
 
   return (
     <div>
@@ -316,17 +311,34 @@ export default function DbPage() {
             >
               {healthChecking ? 'チェック中...' : '画像ヘルスチェック'}
             </button>
-            <button
-              type="button"
-              onClick={cycleSortBy}
-              className={`px-3 sm:px-4 py-1.5 text-xs font-medium rounded-lg border transition-colors whitespace-nowrap ${
-                sortBy !== 'default'
-                  ? 'bg-text-primary/10 border-text-primary/30 text-text-primary'
-                  : 'border-border-card text-text-secondary hover:bg-warm-100'
-              }`}
-            >
-              タグ順 {sortBy === 'tag' ? '↑' : sortBy === 'tag-desc' ? '↓' : ''}
-            </button>
+            {availableTags.length > 0 && (
+              <div className="flex flex-wrap items-center gap-1.5">
+                <span className="text-[11px] text-text-secondary mr-0.5">タグ:</span>
+                {filterTag && (
+                  <button
+                    type="button"
+                    onClick={() => setFilterTag(null)}
+                    className="px-2.5 py-1 text-[11px] font-medium rounded-full border border-border-card text-text-secondary hover:bg-warm-100 transition-colors"
+                  >
+                    すべて
+                  </button>
+                )}
+                {availableTags.map((tag) => (
+                  <button
+                    key={tag}
+                    type="button"
+                    onClick={() => setFilterTag(filterTag === tag ? null : tag)}
+                    className={`px-2.5 py-1 text-[11px] font-medium rounded-full border transition-colors ${
+                      filterTag === tag
+                        ? 'bg-text-primary text-white border-text-primary'
+                        : 'border-border-card text-text-secondary hover:bg-warm-100'
+                    }`}
+                  >
+                    {tag}
+                  </button>
+                ))}
+              </div>
+            )}
             {healthResult && (
               <span className="text-xs text-text-secondary">
                 {healthResult.checked}件完了
@@ -343,6 +355,12 @@ export default function DbPage() {
           ]}
         />
       </div>
+
+      {filterTag && (
+        <p className="text-xs text-text-secondary mb-3">
+          「{filterTag}」で絞り込み中: <span className="font-bold text-text-primary">{filteredCards.length}件</span> / {cards.length}件
+        </p>
+      )}
 
       {loading ? (
         <p className="text-text-secondary">読み込み中...</p>
@@ -368,7 +386,7 @@ export default function DbPage() {
                 </tr>
               </thead>
               <tbody>
-                {sortedCards.map((card) => (
+                {filteredCards.map((card) => (
                   <tr key={card.id} className="border-t border-border-card hover:bg-[#ded5cb] transition-colors">
                     <td className="px-4 py-3">
                       <div className="relative">
@@ -439,7 +457,7 @@ export default function DbPage() {
 
           {/* Mobile: カード表示 */}
           <div className="sm:hidden space-y-2">
-            {sortedCards.map((card) => (
+            {filteredCards.map((card) => (
               <div
                 key={card.id}
                 className="bg-card-bg border border-border-card rounded-xl p-3 active:bg-[#ded5cb] transition-colors cursor-pointer"
