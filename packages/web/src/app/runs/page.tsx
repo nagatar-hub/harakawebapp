@@ -171,7 +171,8 @@ export default function RunsPage() {
   }, [fetchRuns]);
 
   // running 状態が変わったらインターバルを再設定
-  const hasRunning = runs.some(r => r.status === 'running');
+  const runningRun = runs.find(r => r.status === 'running');
+  const hasRunning = !!runningRun;
   const hasCompletedSync = runs.some(r => r.status === 'completed' && r.plan_done_at && !r.generate_done_at);
   useEffect(() => {
     const id = setInterval(fetchRuns, hasRunning ? 2000 : 10000);
@@ -438,48 +439,79 @@ export default function RunsPage() {
           <h1 className="page-title text-4xl text-text-primary">実行履歴</h1>
         </div>
         <div className="flex gap-3">
-          <button
-            onClick={() => triggerJob('sync')}
-            disabled={triggering !== null || hasRunning}
-            className={`px-5 py-2.5 rounded-full text-sm font-semibold transition-all duration-100 select-none ${
-              triggering === 'sync'
-                ? 'bg-blue-600 text-white scale-90 shadow-inner'
-                : triggering !== null || hasRunning
-                  ? 'bg-text-primary/40 text-white/70 cursor-not-allowed'
-                  : 'bg-text-primary text-white hover:bg-warm-800 active:scale-90 active:bg-warm-900 active:shadow-[inset_0_2px_8px_rgba(0,0,0,0.3)]'
-            }`}
-          >
-            {triggering === 'sync' ? (
-              <span className="flex items-center gap-2">
+          {hasRunning ? (
+            <>
+              <div className="px-5 py-2.5 rounded-full text-sm font-semibold bg-blue-600 text-white flex items-center gap-2">
                 <span className="inline-block w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                起動中...
-              </span>
-            ) : hasRunning ? '実行中...' : '同期実行 →'}
-          </button>
-          <button
-            onClick={() => handleGenerateClick()}
-            disabled={triggering !== null || hasRunning || generateConfirmLoading || !hasCompletedSync}
-            className={`px-5 py-2.5 rounded-full text-sm font-semibold transition-all duration-100 select-none ${
-              triggering === 'generate' || generateConfirmLoading
-                ? 'bg-blue-600 text-white scale-90 shadow-inner'
-                : triggering !== null || hasRunning || !hasCompletedSync
-                  ? 'bg-text-primary/40 text-white/70 cursor-not-allowed'
-                  : 'bg-text-primary text-white hover:bg-warm-800 active:scale-90 active:bg-warm-900 active:shadow-[inset_0_2px_8px_rgba(0,0,0,0.3)]'
-            }`}
-            title={!hasCompletedSync ? '先に同期を実行してください' : undefined}
-          >
-            {triggering === 'generate' ? (
-              <span className="flex items-center gap-2">
-                <span className="inline-block w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                起動中...
-              </span>
-            ) : generateConfirmLoading ? (
-              <span className="flex items-center gap-2">
-                <span className="inline-block w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                確認中...
-              </span>
-            ) : hasRunning ? '実行中...' : !hasCompletedSync ? '画像生成（同期が必要）' : '画像生成 →'}
-          </button>
+                {runningRun?.generate_done_at === null && runningRun?.plan_done_at ? '画像生成中...' : '同期実行中...'}
+              </div>
+              <button
+                onClick={async () => {
+                  if (!runningRun || !confirm('実行中のジョブを強制停止しますか？')) return;
+                  try {
+                    const res = await fetch(`${API_URL}/api/runs/${runningRun.id}/reset`, { method: 'POST' });
+                    if (res.ok) {
+                      addToast({ type: 'success', message: 'ジョブを強制停止しました。' });
+                      fetchRuns();
+                    } else {
+                      const err = await res.json();
+                      addToast({ type: 'warning', message: `停止失敗: ${err.error}` });
+                    }
+                  } catch {
+                    addToast({ type: 'warning', message: '停止リクエストに失敗しました。' });
+                  }
+                }}
+                className="px-5 py-2.5 rounded-full text-sm font-semibold border border-red-300 text-red-700 bg-red-50 hover:bg-red-100 transition-colors"
+              >
+                ⏹ 強制停止
+              </button>
+            </>
+          ) : (
+            <>
+              <button
+                onClick={() => triggerJob('sync')}
+                disabled={triggering !== null}
+                className={`px-5 py-2.5 rounded-full text-sm font-semibold transition-all duration-100 select-none ${
+                  triggering === 'sync'
+                    ? 'bg-blue-600 text-white scale-90 shadow-inner'
+                    : triggering !== null
+                      ? 'bg-text-primary/40 text-white/70 cursor-not-allowed'
+                      : 'bg-text-primary text-white hover:bg-warm-800 active:scale-90 active:bg-warm-900 active:shadow-[inset_0_2px_8px_rgba(0,0,0,0.3)]'
+                }`}
+              >
+                {triggering === 'sync' ? (
+                  <span className="flex items-center gap-2">
+                    <span className="inline-block w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                    起動中...
+                  </span>
+                ) : '同期実行 →'}
+              </button>
+              <button
+                onClick={() => handleGenerateClick()}
+                disabled={triggering !== null || generateConfirmLoading || !hasCompletedSync}
+                className={`px-5 py-2.5 rounded-full text-sm font-semibold transition-all duration-100 select-none ${
+                  triggering === 'generate' || generateConfirmLoading
+                    ? 'bg-blue-600 text-white scale-90 shadow-inner'
+                    : triggering !== null || !hasCompletedSync
+                      ? 'bg-text-primary/40 text-white/70 cursor-not-allowed'
+                      : 'bg-text-primary text-white hover:bg-warm-800 active:scale-90 active:bg-warm-900 active:shadow-[inset_0_2px_8px_rgba(0,0,0,0.3)]'
+                }`}
+                title={!hasCompletedSync ? '先に同期を実行してください' : undefined}
+              >
+                {triggering === 'generate' ? (
+                  <span className="flex items-center gap-2">
+                    <span className="inline-block w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                    起動中...
+                  </span>
+                ) : generateConfirmLoading ? (
+                  <span className="flex items-center gap-2">
+                    <span className="inline-block w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                    確認中...
+                  </span>
+                ) : !hasCompletedSync ? '画像生成（同期が必要）' : '画像生成 →'}
+              </button>
+            </>
+          )}
         </div>
       </div>
 
@@ -723,31 +755,6 @@ export default function RunsPage() {
                 </div>
               )}
 
-              {/* Force stop button for running jobs */}
-              {run.status === 'running' && (
-                <div className="mt-4">
-                  <button
-                    onClick={async () => {
-                      if (!confirm('このジョブを強制停止しますか？')) return;
-                      try {
-                        const res = await fetch(`${API_URL}/api/runs/${run.id}/reset`, { method: 'POST' });
-                        if (res.ok) {
-                          addToast({ type: 'success', message: 'ジョブを強制停止しました。' });
-                          fetchRuns();
-                        } else {
-                          const err = await res.json();
-                          addToast({ type: 'warning', message: `停止失敗: ${err.error}` });
-                        }
-                      } catch {
-                        addToast({ type: 'warning', message: '停止リクエストに失敗しました。' });
-                      }
-                    }}
-                    className="text-sm px-4 py-2 rounded-full border border-red-300 text-red-700 bg-red-50 hover:bg-red-100 transition-colors"
-                  >
-                    ⏹ 強制停止
-                  </button>
-                </div>
-              )}
 
               {run.error_message && (
                 <p className="mt-4 text-sm text-[#8d3a22] bg-[#fff0ec] border border-[#e3b0a2] p-3 rounded-xl">{run.error_message}</p>
