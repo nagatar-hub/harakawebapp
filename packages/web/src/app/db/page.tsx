@@ -312,32 +312,16 @@ export default function DbPage() {
               {healthChecking ? 'チェック中...' : '画像ヘルスチェック'}
             </button>
             {availableTags.length > 0 && (
-              <div className="flex flex-wrap items-center gap-1.5">
-                <span className="text-[11px] text-text-secondary mr-0.5">タグ:</span>
-                {filterTag && (
-                  <button
-                    type="button"
-                    onClick={() => setFilterTag(null)}
-                    className="px-2.5 py-1 text-[11px] font-medium rounded-full border border-border-card text-text-secondary hover:bg-warm-100 transition-colors"
-                  >
-                    すべて
-                  </button>
-                )}
+              <select
+                value={filterTag || ''}
+                onChange={(e) => setFilterTag(e.target.value || null)}
+                className="px-3 py-1.5 text-xs font-medium rounded-lg border border-border-card bg-white text-text-primary focus:outline-none focus:ring-2 focus:ring-[#b8a080] appearance-none bg-[url('data:image/svg+xml;charset=utf-8,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%2212%22%20height%3D%2212%22%20viewBox%3D%220%200%2012%2012%22%3E%3Cpath%20fill%3D%22%23666%22%20d%3D%22M6%208L1%203h10z%22%2F%3E%3C%2Fsvg%3E')] bg-no-repeat bg-[right_8px_center] pr-7"
+              >
+                <option value="">タグ絞り込み</option>
                 {availableTags.map((tag) => (
-                  <button
-                    key={tag}
-                    type="button"
-                    onClick={() => setFilterTag(filterTag === tag ? null : tag)}
-                    className={`px-2.5 py-1 text-[11px] font-medium rounded-full border transition-colors ${
-                      filterTag === tag
-                        ? 'bg-text-primary text-white border-text-primary'
-                        : 'border-border-card text-text-secondary hover:bg-warm-100'
-                    }`}
-                  >
-                    {tag}
-                  </button>
+                  <option key={tag} value={tag}>{tag}</option>
                 ))}
-              </div>
+              </select>
             )}
             {healthResult && (
               <span className="text-xs text-text-secondary">
