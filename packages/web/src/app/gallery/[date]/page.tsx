@@ -280,7 +280,7 @@ export default function GalleryDatePage() {
                               className="w-full text-left"
                             >
                               {page.image_url && (
-                                <img src={page.image_url} alt={page.page_label || ''} className="w-full h-auto" loading="lazy" />
+                                <img src={`${page.image_url}?t=${Date.now()}`} alt={page.page_label || ''} className="w-full h-auto" loading="lazy" />
                               )}
                             </button>
                             <div className="px-4 py-3 flex items-center justify-between">
