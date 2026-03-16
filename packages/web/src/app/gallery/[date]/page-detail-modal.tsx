@@ -237,6 +237,277 @@ function CardEditPopup({
   );
 }
 
+/* ─── Card Add Popup ─── */
+function CardAddPopup({
+  pageId,
+  franchise,
+  existingCardIds,
+  onAdded,
+  onClose,
+}: {
+  pageId: string;
+  franchise: string;
+  existingCardIds: string[];
+  onAdded: (card: CardDetail) => void;
+  onClose: () => void;
+}) {
+  const [mode, setMode] = useState<'search' | 'manual'>('search');
+  const [query, setQuery] = useState('');
+  const [results, setResults] = useState<CardDetail[]>([]);
+  const [searching, setSearching] = useState(false);
+  const [adding, setAdding] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  // 手動入力フィールド
+  const [manualName, setManualName] = useState('');
+  const [manualTag, setManualTag] = useState('');
+  const [manualPriceHigh, setManualPriceHigh] = useState('');
+  const [manualPriceLow, setManualPriceLow] = useState('');
+  const [manualImageUrl, setManualImageUrl] = useState('');
+
+  async function handleSearch() {
+    if (!query.trim()) return;
+    setSearching(true);
+    setError(null);
+    try {
+      const exclude = existingCardIds.join(',');
+      const res = await fetch(
+        `${API_URL}/api/gallery/cards/search?q=${encodeURIComponent(query)}&franchise=${encodeURIComponent(franchise)}&exclude=${exclude}`
+      );
+      if (res.ok) {
+        setResults(await res.json());
+      }
+    } catch {
+      setError('検索に失敗しました');
+    }
+    setSearching(false);
+  }
+
+  async function addExistingCard(cardId: string) {
+    setAdding(true);
+    setError(null);
+    try {
+      const res = await fetch(`${API_URL}/api/gallery/pages/${pageId}/cards`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ cardId }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        onAdded(data.card);
+        onClose();
+      } else {
+        const err = await res.json();
+        setError(err.error || '追加に失敗しました');
+      }
+    } catch {
+      setError('ネットワークエラー');
+    }
+    setAdding(false);
+  }
+
+  async function addManualCard() {
+    if (!manualName.trim()) { setError('カード名は必須です'); return; }
+    setAdding(true);
+    setError(null);
+    const highNum = manualPriceHigh ? parseFloat(manualPriceHigh.replace(/[¥,]/g, '')) : undefined;
+    const lowNum = manualPriceLow ? parseFloat(manualPriceLow.replace(/[¥,]/g, '')) : undefined;
+    if (manualPriceHigh && isNaN(highNum!)) { setError('価格(高)に有効な数値を入力してください'); setAdding(false); return; }
+    if (manualPriceLow && isNaN(lowNum!)) { setError('価格(低)に有効な数値を入力してください'); setAdding(false); return; }
+
+    try {
+      const res = await fetch(`${API_URL}/api/gallery/pages/${pageId}/cards`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          card_name: manualName,
+          tag: manualTag || undefined,
+          price_high: highNum,
+          price_low: lowNum,
+          image_url: manualImageUrl || undefined,
+        }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        onAdded(data.card);
+        onClose();
+      } else {
+        const err = await res.json();
+        setError(err.error || '追加に失敗しました');
+      }
+    } catch {
+      setError('ネットワークエラー');
+    }
+    setAdding(false);
+  }
+
+  return (
+    <div className="fixed inset-0 z-[60] bg-black/50 flex items-center justify-center p-4" onClick={onClose}>
+      <div
+        className="bg-page-bg rounded-2xl border border-border-card shadow-2xl w-full max-w-lg max-h-[80vh] overflow-hidden flex flex-col"
+        onClick={e => e.stopPropagation()}
+      >
+        {/* Header */}
+        <div className="flex items-center justify-between px-5 py-3 border-b border-border-card bg-warm-50">
+          <h3 className="text-base font-bold text-text-primary">カード追加</h3>
+          <button
+            onClick={onClose}
+            className="w-7 h-7 rounded-full bg-warm-200 text-text-secondary hover:bg-warm-300 flex items-center justify-center text-sm"
+          >
+            ×
+          </button>
+        </div>
+
+        {/* Tab */}
+        <div className="flex border-b border-border-card">
+          <button
+            onClick={() => setMode('search')}
+            className={`flex-1 py-2.5 text-sm font-medium transition-colors ${
+              mode === 'search' ? 'text-text-primary border-b-2 border-text-primary' : 'text-text-secondary hover:text-text-primary'
+            }`}
+          >
+            既存カードから検索
+          </button>
+          <button
+            onClick={() => setMode('manual')}
+            className={`flex-1 py-2.5 text-sm font-medium transition-colors ${
+              mode === 'manual' ? 'text-text-primary border-b-2 border-text-primary' : 'text-text-secondary hover:text-text-primary'
+            }`}
+          >
+            手動追加
+          </button>
+        </div>
+
+        {/* Error */}
+        {error && (
+          <div className="mx-5 mt-3 px-3 py-2 rounded-lg text-sm bg-red-50 text-red-700 border border-red-200">
+            {error}
+          </div>
+        )}
+
+        <div className="flex-1 overflow-y-auto p-5">
+          {mode === 'search' ? (
+            <div className="space-y-3">
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  value={query}
+                  onChange={e => setQuery(e.target.value)}
+                  onKeyDown={e => e.key === 'Enter' && handleSearch()}
+                  placeholder="カード名で検索..."
+                  className="flex-1 px-3 py-2 border border-border-card rounded-lg bg-white text-sm"
+                  autoFocus
+                />
+                <button
+                  onClick={handleSearch}
+                  disabled={searching || !query.trim()}
+                  className="px-4 py-2 rounded-lg text-sm font-medium bg-text-primary text-white hover:bg-warm-800 disabled:opacity-40"
+                >
+                  {searching ? '検索中...' : '検索'}
+                </button>
+              </div>
+
+              {results.length > 0 && (
+                <div className="space-y-1 max-h-[40vh] overflow-y-auto">
+                  {results.map(card => (
+                    <button
+                      key={card.id}
+                      onClick={() => addExistingCard(card.id)}
+                      disabled={adding}
+                      className="w-full flex items-center gap-3 p-2 rounded-lg hover:bg-warm-100 transition-colors text-left disabled:opacity-50"
+                    >
+                      <div className="w-8 h-11 rounded border border-border-card bg-warm-100 overflow-hidden flex-shrink-0">
+                        {(card.alt_image_url || card.image_url) && (
+                          <img src={card.alt_image_url || card.image_url || ''} alt="" className="w-full h-full object-contain" />
+                        )}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="text-sm font-medium text-text-primary truncate">{card.card_name}</div>
+                        <div className="text-xs text-text-secondary">
+                          {card.tag && <span className="mr-2">{card.tag}</span>}
+                          {card.price_high != null && <span>{formatPrice(card.price_high)}</span>}
+                        </div>
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              )}
+              {results.length === 0 && query && !searching && (
+                <p className="text-sm text-text-secondary text-center py-4">
+                  該当なし。「手動追加」タブで直接入力できます。
+                </p>
+              )}
+            </div>
+          ) : (
+            <div className="space-y-3">
+              <div>
+                <label className="block text-xs font-medium text-text-secondary mb-1">カード名 *</label>
+                <input
+                  type="text"
+                  value={manualName}
+                  onChange={e => setManualName(e.target.value)}
+                  className="w-full px-3 py-2 border border-border-card rounded-lg bg-white text-sm"
+                  placeholder="例: ピカチュウVMAX"
+                  autoFocus
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-text-secondary mb-1">タグ</label>
+                <input
+                  type="text"
+                  value={manualTag}
+                  onChange={e => setManualTag(e.target.value)}
+                  className="w-full px-3 py-2 border border-border-card rounded-lg bg-white text-sm"
+                  placeholder="例: TOP, V/SA"
+                />
+              </div>
+              <div className="flex gap-3">
+                <div className="flex-1">
+                  <label className="block text-xs font-medium text-text-secondary mb-1">価格（高）</label>
+                  <input
+                    type="text"
+                    value={manualPriceHigh}
+                    onChange={e => setManualPriceHigh(e.target.value)}
+                    className="w-full px-3 py-2 border border-border-card rounded-lg bg-white text-sm"
+                    placeholder="例: 500000"
+                  />
+                </div>
+                <div className="flex-1">
+                  <label className="block text-xs font-medium text-text-secondary mb-1">価格（低）</label>
+                  <input
+                    type="text"
+                    value={manualPriceLow}
+                    onChange={e => setManualPriceLow(e.target.value)}
+                    className="w-full px-3 py-2 border border-border-card rounded-lg bg-white text-sm"
+                    placeholder="例: 400000"
+                  />
+                </div>
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-text-secondary mb-1">画像URL</label>
+                <input
+                  type="text"
+                  value={manualImageUrl}
+                  onChange={e => setManualImageUrl(e.target.value)}
+                  className="w-full px-3 py-2 border border-border-card rounded-lg bg-white text-sm"
+                  placeholder="https://..."
+                />
+              </div>
+              <button
+                onClick={addManualCard}
+                disabled={adding || !manualName.trim()}
+                className="w-full mt-2 px-4 py-2 rounded-full text-sm font-semibold bg-text-primary text-white hover:bg-warm-800 disabled:opacity-50"
+              >
+                {adding ? '追加中...' : '追加'}
+              </button>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 /* ─── Sortable Row ─── */
 function SortableRow({
   card,
@@ -356,6 +627,7 @@ export function PageDetailModal({
   const [editingCardId, setEditingCardId] = useState<string | null>(null);
   const [regenerating, setRegenerating] = useState(false);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const [showAddCard, setShowAddCard] = useState(false);
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
@@ -596,6 +868,16 @@ export function PageDetailModal({
                       </SortableContext>
                     </table>
                   </DndContext>
+
+                  {/* カード追加ボタン */}
+                  {cards.length < 40 && (
+                    <button
+                      onClick={() => setShowAddCard(true)}
+                      className="mt-3 w-full py-2 rounded-lg border border-dashed border-border-card text-sm text-text-secondary hover:bg-warm-100 hover:text-text-primary transition-colors"
+                    >
+                      + カード追加（{cards.length}/40）
+                    </button>
+                  )}
                 </div>
               </div>
             )}
@@ -609,6 +891,21 @@ export function PageDetailModal({
           card={editingCard}
           onSave={saveCard}
           onClose={() => setEditingCardId(null)}
+        />
+      )}
+
+      {/* Card Add Popup */}
+      {showAddCard && page && (
+        <CardAddPopup
+          pageId={pageId}
+          franchise={page.franchise}
+          existingCardIds={cards.map(c => c.id)}
+          onAdded={(card) => {
+            setCards(prev => [...prev, card]);
+            setMessage({ type: 'success', text: `${card.card_name} を追加しました` });
+            setTimeout(() => setMessage(null), 3000);
+          }}
+          onClose={() => setShowAddCard(false)}
         />
       )}
     </>

@@ -209,6 +209,107 @@ galleryRoutes.put('/gallery/pages/:pageId/reorder', async (c) => {
   return c.json({ status: 'ok', cardIds });
 });
 
+/** カード検索（既存prepared_cardから） */
+galleryRoutes.get('/gallery/cards/search', async (c) => {
+  const q = c.req.query('q') || '';
+  const franchise = c.req.query('franchise') || '';
+  const excludeIds = c.req.query('exclude')?.split(',').filter(Boolean) || [];
+
+  if (!q && !franchise) return c.json([]);
+
+  const supabase = createSupabaseClient();
+  let query = supabase
+    .from('prepared_card')
+    .select('id, franchise, card_name, grade, list_no, image_url, alt_image_url, rarity, tag, price_high, price_low, image_status')
+    .limit(20);
+
+  if (franchise) query = query.eq('franchise', franchise);
+  if (q) query = query.ilike('card_name', `%${q}%`);
+
+  const { data, error } = await query;
+  if (error) return c.json({ error: error.message }, 500);
+
+  const results = excludeIds.length > 0
+    ? (data || []).filter(c => !excludeIds.includes(c.id))
+    : data || [];
+
+  return c.json(results);
+});
+
+/** ページにカード追加 */
+galleryRoutes.post('/gallery/pages/:pageId/cards', async (c) => {
+  const pageId = c.req.param('pageId');
+  const body = await c.req.json<{
+    cardId?: string;
+    card_name?: string;
+    tag?: string;
+    price_high?: number;
+    price_low?: number;
+    image_url?: string;
+    franchise?: string;
+  }>();
+
+  const supabase = createSupabaseClient();
+
+  const { data: page, error: pageErr } = await supabase
+    .from('generated_page')
+    .select('card_ids, franchise')
+    .eq('id', pageId)
+    .single();
+
+  if (pageErr || !page) return c.json({ error: 'Page not found' }, 404);
+
+  const currentIds = (page as Record<string, unknown>).card_ids as string[] || [];
+  if (currentIds.length >= 40) {
+    return c.json({ error: 'ページは最大40枚です' }, 400);
+  }
+
+  let cardId = body.cardId;
+
+  if (!cardId) {
+    // 手動追加: prepared_card にレコード作成
+    if (!body.card_name) return c.json({ error: 'card_name は必須です' }, 400);
+
+    const { data: newCard, error: insertErr } = await supabase
+      .from('prepared_card')
+      .insert({
+        franchise: (page as Record<string, unknown>).franchise || body.franchise || 'Pokemon',
+        card_name: body.card_name,
+        tag: body.tag || null,
+        price_high: body.price_high || null,
+        price_low: body.price_low || null,
+        image_url: body.image_url || null,
+        run_id: null,
+      })
+      .select('id')
+      .single();
+
+    if (insertErr || !newCard) return c.json({ error: `カード作成失敗: ${insertErr?.message}` }, 500);
+    cardId = newCard.id;
+  }
+
+  if (currentIds.includes(cardId)) {
+    return c.json({ error: 'このカードは既にページに含まれています' }, 400);
+  }
+
+  const newIds = [...currentIds, cardId];
+  const { error } = await supabase
+    .from('generated_page')
+    .update({ card_ids: newIds })
+    .eq('id', pageId);
+
+  if (error) return c.json({ error: error.message }, 500);
+
+  // 追加したカードのデータを返す
+  const { data: card } = await supabase
+    .from('prepared_card')
+    .select('id, franchise, card_name, grade, list_no, image_url, alt_image_url, rarity, tag, price_high, price_low, image_status')
+    .eq('id', cardId)
+    .single();
+
+  return c.json({ status: 'ok', card, total: newIds.length });
+});
+
 /** ページからカード削除 */
 galleryRoutes.delete('/gallery/pages/:pageId/cards/:cardId', async (c) => {
   const { pageId, cardId } = c.req.param();
