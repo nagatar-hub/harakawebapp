@@ -846,7 +846,7 @@ export function PageDetailModal({
                           <th className="pb-2 pr-2">タグ</th>
                           <th className="pb-2 pr-2 text-right">価格(高)</th>
                           <th className="pb-2 pr-2 text-right">価格(低)</th>
-                          <th className="pb-2">状態</th>
+                          <th className="pb-2 whitespace-nowrap">状態</th>
                           <th className="pb-2 w-8 text-center">削除</th>
                         </tr>
                       </thead>
