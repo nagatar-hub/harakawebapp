@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState, useCallback, useRef } from 'react';
+import Link from 'next/link';
 import { FranchiseTabs } from '@/components/franchise-tabs';
 
 type DbCard = {
@@ -345,6 +346,12 @@ export default function DbPage() {
             >
               {healthChecking ? 'チェック中...' : '画像ヘルスチェック'}
             </button>
+            <Link
+              href="/tags"
+              className="px-3 sm:px-4 py-1.5 text-xs font-medium border border-border-card text-text-primary rounded-lg hover:bg-warm-100 transition-colors whitespace-nowrap"
+            >
+              タグ管理 →
+            </Link>
             {hasAnyTag && (
               <select
                 value={filterTag || ''}
