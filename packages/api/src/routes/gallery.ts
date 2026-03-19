@@ -220,8 +220,9 @@ galleryRoutes.get('/gallery/cards/search', async (c) => {
   const supabase = createSupabaseClient();
   let query = supabase
     .from('prepared_card')
-    .select('id, franchise, card_name, grade, list_no, image_url, alt_image_url, rarity, tag, price_high, price_low, image_status')
-    .limit(20);
+    .select('id, franchise, card_name, grade, list_no, image_url, alt_image_url, rarity, tag, price_high, price_low, image_status, created_at')
+    .order('created_at', { ascending: false })
+    .limit(100);
 
   if (franchise) query = query.eq('franchise', franchise);
   if (q) query = query.ilike('card_name', `%${q}%`);
@@ -229,11 +230,20 @@ galleryRoutes.get('/gallery/cards/search', async (c) => {
   const { data, error } = await query;
   if (error) return c.json({ error: error.message }, 500);
 
-  const results = excludeIds.length > 0
-    ? (data || []).filter(c => !excludeIds.includes(c.id))
-    : data || [];
+  // 同じカード名+グレード+品番の組み合わせで最新のものだけ残す
+  const seen = new Set<string>();
+  const deduped = (data || []).filter(card => {
+    const key = `${card.card_name}|${card.grade || ''}|${card.list_no || ''}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
 
-  return c.json(results);
+  const results = excludeIds.length > 0
+    ? deduped.filter(c => !excludeIds.includes(c.id))
+    : deduped;
+
+  return c.json(results.slice(0, 20));
 });
 
 /** ページにカード追加 */
