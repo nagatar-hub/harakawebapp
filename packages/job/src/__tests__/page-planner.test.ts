@@ -41,6 +41,7 @@ function makeRule(overrides: Partial<RuleRow> = {}): RuleRow {
     behavior: 'isolate',
     priority: 100,
     notes: null,
+    group_key: null,
     created_at: '2024-01-01T00:00:00Z',
     ...overrides,
   };

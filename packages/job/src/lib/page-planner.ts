@@ -230,8 +230,20 @@ export function planPages(
 
   const pages: PagePlan[] = [];
 
+  // group ルールを group_key ごとに集約（先に抽出）
+  const groupMap = new Map<string, RuleRow[]>();
+  const nonGroupRules: RuleRow[] = [];
   for (const rule of sortedRules) {
-    // マッチするカードを抽出
+    if (rule.behavior === 'group' && rule.group_key) {
+      if (!groupMap.has(rule.group_key)) groupMap.set(rule.group_key, []);
+      groupMap.get(rule.group_key)!.push(rule);
+    } else {
+      nonGroupRules.push(rule);
+    }
+  }
+
+  // isolate / exclude / merge を先に処理
+  for (const rule of nonGroupRules) {
     const matchedCards: PreparedCardRow[] = [];
     for (const id of remaining) {
       const card = cardById.get(id)!;
@@ -242,14 +254,12 @@ export function planPages(
 
     if (matchedCards.length === 0) continue;
 
-    // remaining から除外
     for (const card of matchedCards) {
       remaining.delete(card.id);
     }
 
     switch (rule.behavior) {
       case 'isolate': {
-        // 専用ページに振り分け（サブタグでグルーピング）
         const rulePages = splitIntoGroupedPages(matchedCards, totalSlots);
         rulePages.forEach((page, idx) => {
           page.label = idx === 0 ? rule.tag_pattern : `${rule.tag_pattern}-${idx + 1}`;
@@ -258,11 +268,9 @@ export function planPages(
         break;
       }
       case 'exclude': {
-        // 除外: どのページにも含めない（remaining から削除済み）
         break;
       }
       case 'merge': {
-        // merge: 将来実装。現時点では isolate と同じ動作
         const rulePages = splitIntoGroupedPages(matchedCards, totalSlots);
         rulePages.forEach((page, idx) => {
           page.label = idx === 0 ? rule.tag_pattern : `${rule.tag_pattern}-${idx + 1}`;
@@ -271,6 +279,28 @@ export function planPages(
         break;
       }
     }
+  }
+
+  // group ルール処理: group_key ごとにマッチするカードをまとめてページに
+  for (const [groupKey, groupRules] of groupMap) {
+    const matchedCards: PreparedCardRow[] = [];
+    for (const id of remaining) {
+      const card = cardById.get(id)!;
+      if (groupRules.some(rule => matchesRule(card.tag, rule))) {
+        matchedCards.push(card);
+      }
+    }
+    if (matchedCards.length === 0) continue;
+
+    for (const card of matchedCards) {
+      remaining.delete(card.id);
+    }
+
+    const groupPages = splitIntoGroupedPages(matchedCards, totalSlots);
+    groupPages.forEach((page, idx) => {
+      page.label = idx === 0 ? groupKey : `${groupKey}-${idx + 1}`;
+    });
+    pages.push(...groupPages);
   }
 
   // 残りのカードをタグ単位でグルーピングしてページに振り分け

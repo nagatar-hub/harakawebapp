@@ -24,7 +24,7 @@ export type RowConfig = {
 
 export type RunStatus = 'running' | 'completed' | 'failed';
 export type RuleMatchType = 'exact' | 'contains' | 'regex';
-export type RuleBehavior = 'isolate' | 'merge' | 'exclude';
+export type RuleBehavior = 'isolate' | 'merge' | 'exclude' | 'group';
 
 export type RunRow = {
   id: string;
@@ -58,6 +58,7 @@ export type RuleRow = {
   behavior: RuleBehavior;
   priority: number;
   notes: string | null;
+  group_key: string | null;
   created_at: string;
 };
 
