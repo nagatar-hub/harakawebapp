@@ -104,6 +104,14 @@ export default function RunsPage() {
   const [generateConfirm, setGenerateConfirm] = useState<ExcludedCards | null>(null);
   const [generateConfirmChecked, setGenerateConfirmChecked] = useState(false);
   const [generateConfirmLoading, setGenerateConfirmLoading] = useState(false);
+
+  // モーダル表示中に背景スクロール防止
+  useEffect(() => {
+    if (generateConfirm) {
+      document.body.style.overflow = 'hidden';
+      return () => { document.body.style.overflow = ''; };
+    }
+  }, [generateConfirm]);
   const [downloadingRunId, setDownloadingRunId] = useState<string | null>(null);
   const [dlProgress, setDlProgress] = useState({ current: 0, total: 0 });
   const [readyFiles, setReadyFiles] = useState<File[] | null>(null);
