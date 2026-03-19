@@ -121,10 +121,13 @@ export default function TagsPage() {
   // グループ化されたルール
   const groupedRules = new Map<string, Rule[]>();
   const standaloneRules: Rule[] = [];
+  // 既にグループに使われているタグ → グレーアウト用
+  const usedTagToGroup = new Map<string, string>();
   for (const rule of rules) {
     if (rule.behavior === 'group' && rule.group_key) {
       if (!groupedRules.has(rule.group_key)) groupedRules.set(rule.group_key, []);
       groupedRules.get(rule.group_key)!.push(rule);
+      usedTagToGroup.set(rule.tag_pattern, rule.group_key);
     } else {
       standaloneRules.push(rule);
     }
@@ -170,18 +173,28 @@ export default function TagsPage() {
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mb-4">
               {stats.map(s => {
                 const isSelected = selectedTags.has(s.tag);
+                const belongsTo = usedTagToGroup.get(s.tag);
+                const isUsed = !!belongsTo;
                 return (
                   <button
                     key={s.tag}
-                    onClick={() => toggleTag(s.tag)}
+                    onClick={() => !isUsed && toggleTag(s.tag)}
+                    disabled={isUsed}
                     className={`flex items-center justify-between px-4 py-2.5 rounded-xl border text-left transition-all ${
-                      isSelected
-                        ? 'border-text-primary bg-warm-100 ring-1 ring-text-primary'
-                        : 'border-border-card hover:bg-warm-50'
+                      isUsed
+                        ? 'border-border-card opacity-40 cursor-not-allowed'
+                        : isSelected
+                          ? 'border-text-primary bg-warm-100 ring-1 ring-text-primary'
+                          : 'border-border-card hover:bg-warm-50'
                     }`}
                   >
-                    <span className="text-sm font-medium text-text-primary">{s.tag}</span>
-                    <span className="text-sm text-text-secondary">
+                    <div className="min-w-0">
+                      <span className="text-sm font-medium text-text-primary">{s.tag}</span>
+                      {isUsed && (
+                        <span className="text-[10px] text-text-secondary ml-1.5">← {belongsTo}</span>
+                      )}
+                    </div>
+                    <span className="text-sm text-text-secondary flex-shrink-0">
                       平均 <span className="font-bold text-text-primary">{s.avg_count}</span>枚
                       <span className="text-xs ml-1">({s.min_count}-{s.max_count})</span>
                     </span>
