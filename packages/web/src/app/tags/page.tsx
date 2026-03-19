@@ -121,17 +121,19 @@ export default function TagsPage() {
   // グループ化されたルール
   const groupedRules = new Map<string, Rule[]>();
   const standaloneRules: Rule[] = [];
-  // 既にグループに使われているタグ → グレーアウト用
-  const usedTagToGroup = new Map<string, string>();
+  // 既にルールに使われているタグ → 選択モード時にグレーアウト用
+  const usedTagToLabel = new Map<string, string>();
   for (const rule of rules) {
     if (rule.behavior === 'group' && rule.group_key) {
       if (!groupedRules.has(rule.group_key)) groupedRules.set(rule.group_key, []);
       groupedRules.get(rule.group_key)!.push(rule);
-      usedTagToGroup.set(rule.tag_pattern, rule.group_key);
+      usedTagToLabel.set(rule.tag_pattern, rule.group_key);
     } else {
       standaloneRules.push(rule);
+      usedTagToLabel.set(rule.tag_pattern, rule.behavior);
     }
   }
+  const isSelectMode = selectedTags.size > 0;
 
   return (
     <div className="max-w-4xl mx-auto px-4 sm:px-6 pt-6 sm:pt-10 pb-32">
@@ -173,15 +175,16 @@ export default function TagsPage() {
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mb-4">
               {stats.map(s => {
                 const isSelected = selectedTags.has(s.tag);
-                const belongsTo = usedTagToGroup.get(s.tag);
-                const isUsed = !!belongsTo;
+                const belongsTo = usedTagToLabel.get(s.tag);
+                // 選択モード中のみ、既にルールに使われているタグをグレーアウト
+                const isDisabled = isSelectMode && !!belongsTo && !isSelected;
                 return (
                   <button
                     key={s.tag}
-                    onClick={() => !isUsed && toggleTag(s.tag)}
-                    disabled={isUsed}
+                    onClick={() => !isDisabled && toggleTag(s.tag)}
+                    disabled={isDisabled}
                     className={`flex items-center justify-between px-4 py-2.5 rounded-xl border text-left transition-all ${
-                      isUsed
+                      isDisabled
                         ? 'border-border-card opacity-40 cursor-not-allowed'
                         : isSelected
                           ? 'border-text-primary bg-warm-100 ring-1 ring-text-primary'
@@ -190,7 +193,7 @@ export default function TagsPage() {
                   >
                     <div className="min-w-0">
                       <span className="text-sm font-medium text-text-primary">{s.tag}</span>
-                      {isUsed && (
+                      {isDisabled && belongsTo && (
                         <span className="text-[10px] text-text-secondary ml-1.5">← {belongsTo}</span>
                       )}
                     </div>
