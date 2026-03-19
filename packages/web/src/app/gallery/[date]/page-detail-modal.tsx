@@ -717,6 +717,7 @@ export function PageDetailModal({
   const [regenerating, setRegenerating] = useState(false);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [showAddCard, setShowAddCard] = useState(false);
+  const [busy, setBusy] = useState(false);
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
@@ -773,7 +774,7 @@ export function PageDetailModal({
 
   async function handleDragEnd(event: DragEndEvent) {
     const { active, over } = event;
-    if (!over || active.id === over.id) return;
+    if (!over || active.id === over.id || busy) return;
 
     const oldIndex = cards.findIndex(c => c.id === active.id);
     const newIndex = cards.findIndex(c => c.id === over.id);
@@ -781,6 +782,7 @@ export function PageDetailModal({
 
     const newCards = arrayMove(cards, oldIndex, newIndex);
     setCards(newCards);
+    setBusy(true);
 
     try {
       const res = await fetch(`${API_URL}/api/gallery/pages/${page?.id}/reorder`, {
@@ -792,13 +794,14 @@ export function PageDetailModal({
         setMessage({ type: 'success', text: '並び順を保存しました' });
         setTimeout(() => setMessage(null), 2000);
       } else {
-        setCards(cards);
         setMessage({ type: 'error', text: '並べ替えの保存に失敗しました' });
+        await loadPageDetail();
       }
     } catch {
-      setCards(cards);
       setMessage({ type: 'error', text: 'ネットワークエラー' });
+      await loadPageDetail();
     }
+    setBusy(false);
   }
 
   async function handleRegenerate() {
@@ -826,7 +829,9 @@ export function PageDetailModal({
   }
 
   async function handleDeleteCard(cardId: string) {
+    if (busy) return;
     if (!confirm('このカードをページから削除しますか？')) return;
+    setBusy(true);
     try {
       const res = await fetch(`${API_URL}/api/gallery/pages/${pageId}/cards/${cardId}`, {
         method: 'DELETE',
@@ -838,10 +843,13 @@ export function PageDetailModal({
       } else {
         const err = await res.json();
         setMessage({ type: 'error', text: err.error || '削除に失敗しました' });
+        await loadPageDetail();
       }
     } catch {
       setMessage({ type: 'error', text: 'ネットワークエラー' });
+      await loadPageDetail();
     }
+    setBusy(false);
   }
 
   const editingCard = editingCardId ? cards.find(c => c.id === editingCardId) : null;
@@ -1011,10 +1019,11 @@ export function PageDetailModal({
           pageId={pageId}
           franchise={page.franchise}
           existingCardIds={cards.map(c => c.id)}
-          onAdded={(card) => {
+          onAdded={async (card) => {
             setCards(prev => [...prev, card]);
             setMessage({ type: 'success', text: `${card.card_name} を追加しました` });
             setTimeout(() => setMessage(null), 3000);
+            await loadPageDetail();
           }}
           onClose={() => setShowAddCard(false)}
         />
