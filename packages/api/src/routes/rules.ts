@@ -59,21 +59,24 @@ ruleRoutes.get('/tag-stats', async (c) => {
 
   const runIds = recentRuns.map(r => r.id);
 
-  // 各runのprepared_cardからタグ別カード数を集計
-  const { data: cards, error } = await supabase
-    .from('prepared_card')
-    .select('run_id, tag')
-    .in('run_id', runIds)
-    .eq('franchise', franchise)
-    .not('tag', 'is', null)
-    .not('price_high', 'is', null)
-    .gt('price_high', 0);
-
-  if (error) return c.json({ error: error.message }, 500);
+  // 各runのprepared_cardからタグ別カード数を集計（1000件制限を回避するためrunごとに取得）
+  const allCards: { run_id: string; tag: string | null }[] = [];
+  for (const runId of runIds) {
+    const { data, error: fetchError } = await supabase
+      .from('prepared_card')
+      .select('run_id, tag')
+      .eq('run_id', runId)
+      .eq('franchise', franchise)
+      .not('tag', 'is', null)
+      .not('price_high', 'is', null)
+      .gt('price_high', 0);
+    if (fetchError) return c.json({ error: fetchError.message }, 500);
+    if (data) allCards.push(...data);
+  }
 
   // メインタグ別・run別にカウント
   const tagRunCounts = new Map<string, Map<string, number>>();
-  for (const card of cards || []) {
+  for (const card of allCards) {
     const mainTag = card.tag!.includes('/') ? card.tag!.split('/')[0] : card.tag!;
     if (!tagRunCounts.has(mainTag)) tagRunCounts.set(mainTag, new Map());
     const runMap = tagRunCounts.get(mainTag)!;
