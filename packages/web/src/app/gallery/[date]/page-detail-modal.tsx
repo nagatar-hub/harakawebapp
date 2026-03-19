@@ -858,7 +858,7 @@ export function PageDetailModal({
     <>
       <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-end sm:items-center justify-center sm:p-4" onClick={onClose}>
         <div
-          className="bg-page-bg sm:rounded-2xl border-t sm:border border-border-card shadow-2xl max-w-5xl w-full max-h-[95vh] sm:max-h-[90vh] overflow-hidden flex flex-col rounded-t-2xl"
+          className="relative bg-page-bg sm:rounded-2xl border-t sm:border border-border-card shadow-2xl max-w-5xl w-full max-h-[95vh] sm:max-h-[90vh] overflow-hidden flex flex-col rounded-t-2xl"
           onClick={e => e.stopPropagation()}
         >
           {/* Header */}
@@ -905,6 +905,13 @@ export function PageDetailModal({
                 : 'bg-red-50 text-red-700 border border-red-200'
             }`}>
               {message.text}
+            </div>
+          )}
+
+          {/* Busy overlay */}
+          {busy && (
+            <div className="absolute inset-0 z-10 bg-white/50 flex items-center justify-center rounded-2xl">
+              <span className="inline-block w-6 h-6 border-2 border-warm-300 border-t-text-primary rounded-full animate-spin" />
             </div>
           )}
 
@@ -992,7 +999,8 @@ export function PageDetailModal({
                   {cards.length < 40 && (
                     <button
                       onClick={() => setShowAddCard(true)}
-                      className="mt-3 w-full py-2 rounded-lg border border-dashed border-border-card text-sm text-text-secondary hover:bg-warm-100 hover:text-text-primary transition-colors"
+                      disabled={busy}
+                      className={`mt-3 w-full py-2 rounded-lg border border-dashed border-border-card text-sm text-text-secondary transition-colors ${busy ? 'opacity-50 cursor-not-allowed' : 'hover:bg-warm-100 hover:text-text-primary'}`}
                     >
                       + カード追加（{cards.length}/40）
                     </button>
