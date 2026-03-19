@@ -657,21 +657,34 @@ export default function RunsPage() {
               </div>
 
               {/* Gallery link for completed generate runs */}
-              {run.generate_done_at && run.status === 'completed' && (
-                <div className="mt-4 flex gap-3">
-                  <Link
-                    href={`/gallery/${new Date(run.started_at).toLocaleDateString('sv-SE', { timeZone: 'Asia/Tokyo' })}`}
-                    className="inline-flex items-center gap-1.5 text-sm px-4 py-2 rounded-full border border-border-card text-text-primary hover:bg-warm-100 transition-colors"
-                  >
-                    ギャラリーを見る →
-                  </Link>
-                  <button
-                    onClick={() => handleRunDownload(run)}
-                    disabled={downloadingRunId !== null}
-                    className="inline-flex items-center gap-1.5 text-sm px-4 py-2 rounded-full border border-border-card text-text-primary hover:bg-warm-100 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
-                  >
-                    画像DL
-                  </button>
+              {run.status === 'completed' && (
+                <div className="mt-4 flex flex-wrap gap-3">
+                  {run.generate_done_at && (
+                    <>
+                      <Link
+                        href={`/gallery/${new Date(run.started_at).toLocaleDateString('sv-SE', { timeZone: 'Asia/Tokyo' })}`}
+                        className="inline-flex items-center gap-1.5 text-sm px-4 py-2 rounded-full border border-border-card text-text-primary hover:bg-warm-100 transition-colors"
+                      >
+                        ギャラリーを見る →
+                      </Link>
+                      <button
+                        onClick={() => handleRunDownload(run)}
+                        disabled={downloadingRunId !== null}
+                        className="inline-flex items-center gap-1.5 text-sm px-4 py-2 rounded-full border border-border-card text-text-primary hover:bg-warm-100 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                      >
+                        画像DL
+                      </button>
+                    </>
+                  )}
+                  {run.import_done_at && (
+                    <a
+                      href={`${API_URL}/api/runs/${run.id}/kecak-csv`}
+                      className="inline-flex items-center gap-1.5 text-sm px-4 py-2 rounded-full border border-border-card text-text-primary hover:bg-warm-100 transition-colors"
+                      download
+                    >
+                      KECAK CSV
+                    </a>
+                  )}
                 </div>
               )}
 

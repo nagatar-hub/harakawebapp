@@ -195,6 +195,48 @@ runRoutes.post('/runs/:id/reset', async (c) => {
   return c.json({ status: 'reset', id, killed });
 });
 
+/** KECAKデータCSVエクスポート */
+runRoutes.get('/runs/:id/kecak-csv', async (c) => {
+  const id = c.req.param('id');
+  const supabase = createSupabaseClient();
+
+  const { data, error } = await supabase
+    .from('raw_import')
+    .select('franchise, card_name, grade, list_no, rarity, kecak_price, demand, image_url')
+    .eq('run_id', id)
+    .order('franchise')
+    .order('kecak_price', { ascending: false });
+
+  if (error) return c.json({ error: error.message }, 500);
+  if (!data || data.length === 0) return c.json({ error: 'データがありません' }, 404);
+
+  // BOM + CSV生成
+  const headers = ['フランチャイズ', 'カード名', 'グレード', '品番', 'レアリティ', 'KECAK価格', '需要', '画像URL'];
+  const rows = data.map(r => [
+    r.franchise,
+    r.card_name,
+    r.grade || '',
+    r.list_no || '',
+    r.rarity || '',
+    r.kecak_price != null ? String(r.kecak_price) : '',
+    r.demand != null ? String(r.demand) : '',
+    r.image_url || '',
+  ].map(v => `"${v.replace(/"/g, '""')}"`).join(','));
+
+  const csv = '\uFEFF' + [headers.join(','), ...rows].join('\n');
+
+  // run の日時を取得してファイル名に
+  const { data: run } = await supabase.from('run').select('started_at').eq('id', id).single();
+  const dateStr = run?.started_at ? new Date(run.started_at).toISOString().slice(0, 10) : 'unknown';
+
+  return new Response(csv, {
+    headers: {
+      'Content-Type': 'text/csv; charset=utf-8',
+      'Content-Disposition': `attachment; filename="kecak_${dateStr}.csv"`,
+    },
+  });
+});
+
 /** 画像NG修正: 新URLをチェックし、OKならDB+シートに反映 */
 runRoutes.post('/runs/:id/fix-image', async (c) => {
   const runId = c.req.param('id');
