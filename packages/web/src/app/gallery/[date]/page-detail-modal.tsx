@@ -812,12 +812,34 @@ export function PageDetailModal({
         method: 'POST',
       });
       if (res.ok) {
-        setMessage({ type: 'success', text: '再生成を開始しました。しばらくお待ちください...' });
-        setTimeout(async () => {
-          await loadPageDetail();
-          setRegenerating(false);
-          onRegenerated?.();
-        }, 10000);
+        setMessage({ type: 'success', text: '再生成中...' });
+        // ポーリングで完了を待つ（最大60秒）
+        const maxAttempts = 20;
+        for (let i = 0; i < maxAttempts; i++) {
+          await new Promise(r => setTimeout(r, 3000));
+          const check = await fetch(`${API_URL}/api/gallery/pages/${pageId}`);
+          if (check.ok) {
+            const data = await check.json();
+            if (data.page?.status === 'generated' && data.page?.image_url) {
+              setPage(data.page);
+              setCards(data.cards);
+              setMessage({ type: 'success', text: '再生成が完了しました' });
+              setTimeout(() => setMessage(null), 3000);
+              setRegenerating(false);
+              onRegenerated?.();
+              return;
+            }
+            if (data.page?.status === 'failed') {
+              setMessage({ type: 'error', text: '再生成に失敗しました' });
+              setRegenerating(false);
+              return;
+            }
+          }
+        }
+        // タイムアウト
+        setMessage({ type: 'error', text: '再生成がタイムアウトしました。リロードしてください' });
+        await loadPageDetail();
+        setRegenerating(false);
       } else {
         setMessage({ type: 'error', text: '再生成の開始に失敗しました' });
         setRegenerating(false);

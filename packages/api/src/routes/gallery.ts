@@ -365,6 +365,9 @@ galleryRoutes.post('/gallery/pages/:pageId/regenerate', async (c) => {
 
   if (pageErr || !page) return c.json({ error: 'Page not found' }, 404);
 
+  // ステータスを pending に更新（ポーリングで完了検知するため）
+  await supabase.from('generated_page').update({ status: 'pending' }).eq('id', pageId);
+
   // 子プロセスで再生成ジョブを起動（index.ts経由）
   const jobEntry = path.resolve(__dirname, '..', '..', '..', 'job', 'dist', 'index.js');
 

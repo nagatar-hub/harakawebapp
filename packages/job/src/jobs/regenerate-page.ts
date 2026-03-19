@@ -42,6 +42,17 @@ export async function runRegeneratePage() {
   const supabase = createSupabaseClient();
   console.log(`[regenerate-page] ページ再生成開始: ${pageId}`);
 
+  try {
+    await _runRegeneratePage(supabase, pageId);
+  } catch (err) {
+    // 失敗時にステータスを更新（ポーリングで検知可能に）
+    await supabase.from('generated_page').update({ status: 'failed' }).eq('id', pageId);
+    throw err;
+  }
+}
+
+async function _runRegeneratePage(supabase: ReturnType<typeof createSupabaseClient>, pageId: string) {
+
   // ---- 1. ページ情報取得 ----
   const { data: page, error: pageErr } = await supabase
     .from('generated_page')
