@@ -3,7 +3,10 @@
  *
  * refresh token から access token を取得し、スプレッドシートの値を読み取る。
  * 外部ライブラリに依存せず、fetch API のみを使用。
+ * リトライ・タイムアウト付き。
  */
+
+import { fetchWithRetry, OAuthInvalidGrantError } from './fetch-with-retry.js';
 
 // ---------------------------------------------------------------------------
 // 定数
@@ -67,6 +70,7 @@ interface SheetErrorResponse {
  * @param params.clientId     - OAuth クライアント ID
  * @param params.clientSecret - OAuth クライアントシークレット
  * @returns 新しい access token
+ * @throws OAuthInvalidGrantError — トークンが失効している場合
  * @throws トークン取得に失敗した場合
  */
 export async function refreshAccessToken(params: {
@@ -81,23 +85,29 @@ export async function refreshAccessToken(params: {
     client_secret: params.clientSecret,
   }).toString();
 
-  let response: Response;
-  try {
-    response = await fetch(GOOGLE_TOKEN_ENDPOINT, {
+  const response = await fetchWithRetry(
+    GOOGLE_TOKEN_ENDPOINT,
+    {
       method: 'POST',
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
       body,
-    });
-  } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
-    throw new Error(`Google token endpoint へのネットワークエラー: ${message}`);
-  }
+    },
+    { maxRetries: 3, timeoutMs: 15_000 },
+  );
 
   const data: unknown = await response.json();
 
   if (!response.ok) {
     const errorData = data as TokenErrorResponse;
     const description = errorData.error_description ? ` — ${errorData.error_description}` : '';
+
+    // invalid_grant は専用エラーとして識別
+    if (errorData.error === 'invalid_grant') {
+      throw new OAuthInvalidGrantError(
+        `OAuthトークンが失効しています。再認証が必要です: ${errorData.error}${description}`,
+      );
+    }
+
     throw new Error(`アクセストークンの取得に失敗しました: ${errorData.error}${description}`);
   }
 
@@ -129,18 +139,16 @@ export async function fetchSheetValues(params: {
   const encodedRange = encodeURIComponent(params.range);
   const url = `${GOOGLE_SHEETS_API_BASE}/${params.spreadsheetId}/values/${encodedRange}`;
 
-  let response: Response;
-  try {
-    response = await fetch(url, {
+  const response = await fetchWithRetry(
+    url,
+    {
       method: 'GET',
       headers: {
         Authorization: `Bearer ${params.accessToken}`,
       },
-    });
-  } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
-    throw new Error(`Google Sheets API へのネットワークエラー: ${message}`);
-  }
+    },
+    { maxRetries: 3, timeoutMs: 30_000 },
+  );
 
   const data: unknown = await response.json();
 
@@ -177,9 +185,9 @@ export async function appendSheetValues(params: {
   const encodedRange = encodeURIComponent(params.range);
   const url = `${GOOGLE_SHEETS_API_BASE}/${params.spreadsheetId}/values/${encodedRange}:append?valueInputOption=RAW&insertDataOption=INSERT_ROWS`;
 
-  let response: Response;
-  try {
-    response = await fetch(url, {
+  const response = await fetchWithRetry(
+    url,
+    {
       method: 'POST',
       headers: {
         Authorization: `Bearer ${params.accessToken}`,
@@ -190,11 +198,9 @@ export async function appendSheetValues(params: {
         majorDimension: 'ROWS',
         values: params.values,
       }),
-    });
-  } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
-    throw new Error(`Google Sheets API への書き込みネットワークエラー: ${message}`);
-  }
+    },
+    { maxRetries: 3, timeoutMs: 30_000 },
+  );
 
   const data: unknown = await response.json();
 

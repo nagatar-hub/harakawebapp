@@ -1,4 +1,7 @@
 steps:
+  # ============================================================
+  # API: ビルド → プッシュ → デプロイ
+  # ============================================================
   - name: 'gcr.io/cloud-builders/docker'
     args: ['build', '-t', 'asia-northeast1-docker.pkg.dev/$PROJECT_ID/haraka/haraka-api', '.']
 
@@ -18,5 +21,47 @@ steps:
       - '--timeout=300'
       - '--memory=1Gi'
 
+  # ============================================================
+  # Job: ビルド → プッシュ → Cloud Run Jobs 更新
+  # ============================================================
+  - name: 'gcr.io/cloud-builders/docker'
+    args:
+      - 'build'
+      - '-f'
+      - 'packages/job/Dockerfile'
+      - '-t'
+      - 'asia-northeast1-docker.pkg.dev/$PROJECT_ID/haraka/haraka-job'
+      - '.'
+
+  - name: 'gcr.io/cloud-builders/docker'
+    args: ['push', 'asia-northeast1-docker.pkg.dev/$PROJECT_ID/haraka/haraka-job']
+
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+    entrypoint: 'gcloud'
+    args:
+      - 'run'
+      - 'jobs'
+      - 'update'
+      - 'haraka-sync'
+      - '--image=asia-northeast1-docker.pkg.dev/$PROJECT_ID/haraka/haraka-job'
+      - '--region=asia-northeast1'
+      - '--task-timeout=1800'
+      - '--memory=2Gi'
+      - '--set-env-vars=JOB_NAME=sync,TRIGGER=scheduler'
+
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+    entrypoint: 'gcloud'
+    args:
+      - 'run'
+      - 'jobs'
+      - 'update'
+      - 'haraka-generate'
+      - '--image=asia-northeast1-docker.pkg.dev/$PROJECT_ID/haraka/haraka-job'
+      - '--region=asia-northeast1'
+      - '--task-timeout=3600'
+      - '--memory=2Gi'
+      - '--set-env-vars=JOB_NAME=generate,TRIGGER=scheduler'
+
 images:
   - 'asia-northeast1-docker.pkg.dev/$PROJECT_ID/haraka/haraka-api'
+  - 'asia-northeast1-docker.pkg.dev/$PROJECT_ID/haraka/haraka-job'

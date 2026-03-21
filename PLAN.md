@@ -140,52 +140,62 @@ export async function sendDiscordNotification(params: {
 | **B. Cloud Scheduler → Cloud Run Jobs** | ジョブ専用コンテナで実行、リソース分離が完璧 | Cloud Run Jobsの別途デプロイが必要（現在はfork()方式）|
 | **C. API内のnode-cron** | コード完結、追加インフラ不要 | Cloud Runのインスタンスが0にスケールすると動かない。複数インスタンスで重複実行リスク |
 
-#### 推奨: **A. Cloud Scheduler → API エンドポイント**
+#### 採用: **B. Cloud Scheduler → Cloud Run Jobs**
 
 **理由:**
-1. 既存の `POST /api/jobs/sync` をそのまま使える（コード変更最小）
-2. Cloud Schedulerは無料枠で3ジョブまで使える
-3. `triggered_by: 'scheduler'` で手動実行と区別できる（既にsync.tsが`process.env.TRIGGER`を読んでいる）
-4. 方式Bは理想的だが、現状Cloud Run Jobsのデプロイパイプラインが未整備（cloudbuild.yamlはAPI用のみ）
+1. ジョブ専用コンテナでリソース分離が完璧（APIに影響ゼロ）
+2. タスクタイムアウトを最大24時間まで設定可能（APIの300s制限に縛られない）
+3. Job専用にメモリ2Gi等を割り当て可能
+4. Cloud Run Jobsのネイティブリトライ機能が使える
+5. 独立したログストリーム（APIのログに混在しない）
+6. Cloud Schedulerは無料枠で3ジョブまで使える
+7. `packages/job/Dockerfile` は既に完成済み。`cloudbuild.yaml` にJob用ステップを追加するだけ
 
 #### 実装内容
 
-**1. APIエンドポイントの認証追加**
+**1. cloudbuild.yaml にJob用ビルド・デプロイを追加**
 
-現在の `POST /api/jobs/sync` は認証なし。Cloud Schedulerからの呼び出し用に簡易トークン認証を追加。
+API用ビルドの後に、Jobイメージのビルド・プッシュ・Cloud Run Jobs更新ステップを追加。
+`haraka-sync` と `haraka-generate` の2つのCloud Run Jobsを更新する。
 
-```typescript
-// packages/api/src/routes/runs.ts
-runRoutes.post('/jobs/sync', async (c) => {
-  // Cloud Scheduler用のシークレットトークンチェック
-  const authHeader = c.req.header('Authorization');
-  const schedulerToken = process.env.SCHEDULER_SECRET;
-  if (schedulerToken && authHeader !== `Bearer ${schedulerToken}`) {
-    // トークンが設定されていてmismatchの場合のみ拒否
-    // 未設定の場合は既存動作（認証なし）を維持
-    return c.json({ error: 'Unauthorized' }, 401);
-  }
-  // ... 既存ロジック
-});
-```
-
-**2. Cloud Scheduler 設定（手動/gcloud CLI）**
+**2. Cloud Run Jobs の初回作成（手動/gcloud CLI）**
 
 ```bash
+# Sync ジョブ作成
+gcloud run jobs create haraka-sync \
+  --image=asia-northeast1-docker.pkg.dev/$PROJECT_ID/haraka/haraka-job \
+  --region=asia-northeast1 \
+  --task-timeout=1800 \
+  --memory=2Gi \
+  --set-env-vars=JOB_NAME=sync,TRIGGER=scheduler \
+  --set-secrets=SUPABASE_URL=supabase-url:latest,SUPABASE_SERVICE_ROLE_KEY=supabase-service-role-key:latest,DISCORD_WEBHOOK_URL=discord-webhook-url:latest
+
+# Generate ジョブ作成
+gcloud run jobs create haraka-generate \
+  --image=asia-northeast1-docker.pkg.dev/$PROJECT_ID/haraka/haraka-job \
+  --region=asia-northeast1 \
+  --task-timeout=3600 \
+  --memory=2Gi \
+  --set-env-vars=JOB_NAME=generate,TRIGGER=scheduler \
+  --set-secrets=SUPABASE_URL=supabase-url:latest,SUPABASE_SERVICE_ROLE_KEY=supabase-service-role-key:latest,DISCORD_WEBHOOK_URL=discord-webhook-url:latest
+```
+
+**3. Cloud Scheduler 設定（手動/gcloud CLI）**
+
+```bash
+# 朝9時に Sync ジョブを実行
 gcloud scheduler jobs create http haraka-morning-sync \
   --schedule="0 9 * * *" \
   --time-zone="Asia/Tokyo" \
-  --uri="https://<CLOUD_RUN_URL>/api/jobs/sync" \
+  --uri="https://asia-northeast1-run.googleapis.com/apis/run.googleapis.com/v1/namespaces/$PROJECT_ID/jobs/haraka-sync:run" \
   --http-method=POST \
-  --headers="Authorization=Bearer <SCHEDULER_SECRET>,Content-Type=application/json" \
-  --body='{"trigger":"scheduler"}' \
-  --attempt-deadline=600s \
+  --oauth-service-account-email=$PROJECT_NUMBER-compute@developer.gserviceaccount.com \
   --location=asia-northeast1
 ```
 
-**3. テストラン結果のDiscord通知**
+**4. テストラン結果のDiscord通知**
 
-Sync完了時にDiscordに結果サマリーを通知。`triggered_by === 'scheduler'` の場合は追加情報を付与。
+Sync完了時にDiscordに結果サマリーを通知。`TRIGGER=scheduler` の場合は「朝9時テストラン完了」と表記。
 
 ```
 🟢 朝9時テストラン完了
@@ -198,12 +208,11 @@ Sync完了時にDiscordに結果サマリーを通知。`triggered_by === 'sched
 所要時間: 2分34秒
 ```
 
-**4. 環境変数の追加**
+**5. 環境変数の追加**
 
 | 変数名 | 用途 | 設定場所 |
 |--------|------|---------|
 | `DISCORD_WEBHOOK_URL` | Discord通知先 | .env / Secret Manager |
-| `SCHEDULER_SECRET` | Cloud Scheduler認証トークン | .env / Secret Manager |
 
 ---
 
@@ -232,5 +241,4 @@ Sync完了時にDiscordに結果サマリーを通知。`triggered_by === 'sched
 - Supabase上のX認証トークン暗号化（別の問題）
 - トークンキャッシング（毎回refresh tokenからaccess token取得は冗長だが、実害は少ない）
 - Secret Manager upsert時のレースコンディション（発生頻度が極めて低い）
-- Cloud Run Jobsの正式デプロイパイプライン（方式Bへの移行は将来課題）
 - node-cronベースのインプロセススケジューラ（Cloud Runとの相性が悪い）

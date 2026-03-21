@@ -19,6 +19,7 @@ import { downloadDriveFile, downloadImagesWithConcurrency } from '../lib/google-
 import { updateProgress, clearProgress } from '../lib/progress.js';
 import { planPages } from '../lib/page-planner.js';
 import { batchInsert } from '../lib/batch.js';
+import { sendDiscordNotification, COLOR } from '../lib/discord.js';
 import type {
   Database,
   PreparedCardRow,
@@ -441,7 +442,19 @@ export async function runGenerate() {
     }).eq('id', run.id);
 
     await clearProgress(supabase, run.id);
+    const elapsed = ((Date.now() - t0) / 1000).toFixed(1);
     console.log(`[generate] 完了: total_pages=${totalPages}, 総時間=${Date.now() - t0}ms`);
+
+    // Discord 通知: 成功
+    await sendDiscordNotification({
+      title: '🟢 Generate ジョブ完了',
+      description: `画像生成が正常に完了しました`,
+      color: COLOR.SUCCESS,
+      fields: [
+        { name: '生成ページ数', value: `${totalPages}ページ`, inline: true },
+        { name: '所要時間', value: `${elapsed}秒`, inline: true },
+      ],
+    });
 
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
@@ -450,6 +463,18 @@ export async function runGenerate() {
       error_message: message,
     }).eq('id', run.id);
     await clearProgress(supabase, run.id);
+
+    // Discord 通知: 失敗
+    await sendDiscordNotification({
+      title: '🔴 Generate ジョブ失敗',
+      description: message,
+      color: COLOR.ERROR,
+      fields: [
+        { name: 'ジョブ', value: 'generate', inline: true },
+        { name: 'エラー', value: message.substring(0, 1000) },
+      ],
+    });
+
     throw err;
   }
 }
