@@ -14,7 +14,7 @@
  * 10. ページプランニング → generated_page 保存
  */
 
-import { createSupabaseClient } from '../lib/supabase.js';
+import { createSupabaseClientFromSecrets } from '../lib/supabase.js';
 import { fetchSheetValues } from '../lib/google-sheets.js';
 import { getAccessToken, getKecakAccessToken } from '../lib/auth.js';
 import { batchInsert, batchUpsert } from '../lib/batch.js';
@@ -45,7 +45,7 @@ type GeneratedPageInsert = Database['public']['Tables']['generated_page']['Inser
 // ---------------------------------------------------------------------------
 
 export async function runSync() {
-  const supabase = createSupabaseClient();
+  const supabase = await createSupabaseClientFromSecrets();
 
   // ---- 1. Run レコード作成 ----
   const { data: run, error: runError } = await supabase

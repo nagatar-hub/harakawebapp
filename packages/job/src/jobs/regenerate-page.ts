@@ -6,7 +6,7 @@
  * 価格や画像URLの変更後に再生成すれば反映される。
  */
 
-import { createSupabaseClient } from '../lib/supabase.js';
+import { createSupabaseClientFromSecrets } from '../lib/supabase.js';
 import { getAccessToken } from '../lib/auth.js';
 import { composePage } from '../lib/image-composer.js';
 import { downloadDriveFile, downloadImagesWithConcurrency } from '../lib/google-drive.js';
@@ -39,7 +39,7 @@ export async function runRegeneratePage() {
   const pageId = process.env.PAGE_ID;
   if (!pageId) throw new Error('PAGE_ID が未設定です');
 
-  const supabase = createSupabaseClient();
+  const supabase = await createSupabaseClientFromSecrets();
   console.log(`[regenerate-page] ページ再生成開始: ${pageId}`);
 
   try {
@@ -51,7 +51,7 @@ export async function runRegeneratePage() {
   }
 }
 
-async function _runRegeneratePage(supabase: ReturnType<typeof createSupabaseClient>, pageId: string) {
+async function _runRegeneratePage(supabase: Awaited<ReturnType<typeof createSupabaseClientFromSecrets>>, pageId: string) {
 
   // ---- 1. ページ情報取得 ----
   const { data: page, error: pageErr } = await supabase

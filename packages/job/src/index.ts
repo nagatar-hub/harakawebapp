@@ -1,4 +1,4 @@
-import { createSupabaseClient } from './lib/supabase.js';
+import { createSupabaseClientFromSecrets } from './lib/supabase.js';
 import { runSync } from './jobs/sync.js';
 import { runGenerate } from './jobs/generate.js';
 import { runRegeneratePage } from './jobs/regenerate-page.js';
@@ -33,7 +33,8 @@ async function main() {
 }
 
 async function runHealthcheck() {
-  const supabase = createSupabaseClient();
+  // Secret Manager フォールバック対応のクライアントを使用
+  const supabase = await createSupabaseClientFromSecrets();
   const { data, error } = await supabase.from('run').select('id').limit(1);
   if (error) throw new Error(`Supabase: ${error.message}`);
   console.log('Supabase: OK');
