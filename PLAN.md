@@ -69,12 +69,161 @@
 - `downloadDriveFile()`: `fetch` → `fetchWithRetry` に置換
 - `downloadImage()`: HTTP画像取得にもリトライ追加
 
-### Step 7: Syncジョブのエラー通知
-**ファイル:** `packages/job/src/jobs/sync.ts`
+### Step 7: Discord Webhook 通知
+**ファイル:** `packages/job/src/lib/discord.ts`（新規）
 
-- `invalid_grant`（`OAuthInvalidGrantError`）をcatchで特別処理
-  - Run レコードの`error_message`に「再認証が必要」と明記
-  - ステータスを `auth_failed` に設定（UIで目立つように）
+Discord Webhookを使い、ジョブ完了・失敗時にプッシュ通知を送信する。
+UIを見ていなくても異常にすぐ気づける仕組み。
+
+#### 設計
+
+```typescript
+// packages/job/src/lib/discord.ts
+export async function sendDiscordNotification(params: {
+  title: string;
+  description: string;
+  color: number;          // 0x00ff00=成功, 0xff0000=失敗, 0xffaa00=警告
+  fields?: { name: string; value: string; inline?: boolean }[];
+}): Promise<void>
+```
+
+- **環境変数:** `DISCORD_WEBHOOK_URL`（未設定時はスキップ、ログ出力のみ）
+- **Secret Manager対応:** Cloud Run Jobでは `discord-webhook-url` シークレットからも取得
+- **タイムアウト:** 10秒（Discordが落ちていてもジョブは続行）
+- **失敗時:** `console.warn` のみ。通知失敗でジョブを落とさない（fire-and-forget）
+
+#### 通知タイミング
+
+| イベント | 色 | 通知内容 |
+|---------|-----|---------|
+| **Sync 完了** | 🟢 緑 | imported/prepared/pages 件数、所要時間 |
+| **Sync 失敗** | 🔴 赤 | エラーメッセージ、失敗ステップ |
+| **Generate 完了** | 🟢 緑 | 生成ページ数、所要時間 |
+| **Generate 失敗** | 🔴 赤 | エラーメッセージ |
+| **OAuth invalid_grant** | 🔴 赤 | 「再認証が必要です」+ どのアカウントか |
+| **画像NG多発** | 🟡 黄 | `total_image_ng > 10` の場合に警告 |
+| **朝9時テストラン結果** | 下記参照 | 下記参照 |
+
+#### Embed形式例（失敗時）
+
+```json
+{
+  "embeds": [{
+    "title": "🔴 Sync ジョブ失敗",
+    "description": "OAuth トークンが失効しています。再認証してください。",
+    "color": 16711680,
+    "fields": [
+      { "name": "ジョブ", "value": "sync", "inline": true },
+      { "name": "トリガー", "value": "scheduler", "inline": true },
+      { "name": "エラー", "value": "invalid_grant: Token has been revoked" }
+    ],
+    "timestamp": "2026-03-21T09:00:15Z"
+  }]
+}
+```
+
+#### 実装箇所の変更
+
+- `packages/job/src/jobs/sync.ts`: 完了/失敗の `catch`/`finally` に `sendDiscordNotification` を追加
+- `packages/job/src/jobs/generate.ts`: 同上
+- `packages/job/src/index.ts`: トップレベル `catch` にもフォールバック通知（sync/generate内で通知送信前にクラッシュした場合の保険）
+
+### Step 8: 朝9時テストラン（スケジュール実行）
+
+毎朝9時（JST）にSyncジョブを自動実行し、結果をDiscordに通知する。
+
+#### アーキテクチャ選択肢の比較
+
+| 方式 | メリット | デメリット |
+|------|---------|-----------|
+| **A. Cloud Scheduler → API エンドポイント** | 追加インフラ最小、既存の `POST /api/jobs/sync` を叩くだけ | API Cloud Runインスタンスが常時起動前提。コールドスタートだとタイムアウトの恐れ |
+| **B. Cloud Scheduler → Cloud Run Jobs** | ジョブ専用コンテナで実行、リソース分離が完璧 | Cloud Run Jobsの別途デプロイが必要（現在はfork()方式）|
+| **C. API内のnode-cron** | コード完結、追加インフラ不要 | Cloud Runのインスタンスが0にスケールすると動かない。複数インスタンスで重複実行リスク |
+
+#### 推奨: **A. Cloud Scheduler → API エンドポイント**
+
+**理由:**
+1. 既存の `POST /api/jobs/sync` をそのまま使える（コード変更最小）
+2. Cloud Schedulerは無料枠で3ジョブまで使える
+3. `triggered_by: 'scheduler'` で手動実行と区別できる（既にsync.tsが`process.env.TRIGGER`を読んでいる）
+4. 方式Bは理想的だが、現状Cloud Run Jobsのデプロイパイプラインが未整備（cloudbuild.yamlはAPI用のみ）
+
+#### 実装内容
+
+**1. APIエンドポイントの認証追加**
+
+現在の `POST /api/jobs/sync` は認証なし。Cloud Schedulerからの呼び出し用に簡易トークン認証を追加。
+
+```typescript
+// packages/api/src/routes/runs.ts
+runRoutes.post('/jobs/sync', async (c) => {
+  // Cloud Scheduler用のシークレットトークンチェック
+  const authHeader = c.req.header('Authorization');
+  const schedulerToken = process.env.SCHEDULER_SECRET;
+  if (schedulerToken && authHeader !== `Bearer ${schedulerToken}`) {
+    // トークンが設定されていてmismatchの場合のみ拒否
+    // 未設定の場合は既存動作（認証なし）を維持
+    return c.json({ error: 'Unauthorized' }, 401);
+  }
+  // ... 既存ロジック
+});
+```
+
+**2. Cloud Scheduler 設定（手動/gcloud CLI）**
+
+```bash
+gcloud scheduler jobs create http haraka-morning-sync \
+  --schedule="0 9 * * *" \
+  --time-zone="Asia/Tokyo" \
+  --uri="https://<CLOUD_RUN_URL>/api/jobs/sync" \
+  --http-method=POST \
+  --headers="Authorization=Bearer <SCHEDULER_SECRET>,Content-Type=application/json" \
+  --body='{"trigger":"scheduler"}' \
+  --attempt-deadline=600s \
+  --location=asia-northeast1
+```
+
+**3. テストラン結果のDiscord通知**
+
+Sync完了時にDiscordに結果サマリーを通知。`triggered_by === 'scheduler'` の場合は追加情報を付与。
+
+```
+🟢 朝9時テストラン完了
+━━━━━━━━━━━━━━━━━━━
+インポート: 1,234件
+カード準備: 890件
+画像NG: 3件
+タグなし: 12件
+ページ数: 45ページ
+所要時間: 2分34秒
+```
+
+**4. 環境変数の追加**
+
+| 変数名 | 用途 | 設定場所 |
+|--------|------|---------|
+| `DISCORD_WEBHOOK_URL` | Discord通知先 | .env / Secret Manager |
+| `SCHEDULER_SECRET` | Cloud Scheduler認証トークン | .env / Secret Manager |
+
+---
+
+## 変更ファイル一覧
+
+| ファイル | 操作 | ステップ |
+|---------|------|---------|
+| `packages/job/src/lib/fetch-with-retry.ts` | **新規** | Step 1 |
+| `packages/job/src/lib/google-sheets.ts` | 修正 | Step 2 |
+| `packages/api/src/lib/haraka-db-sheet.ts` | 修正 | Step 3 |
+| `packages/job/src/lib/secret-manager.ts` | 修正 | Step 4 |
+| `packages/job/src/lib/auth.ts` | 修正 | Step 5 |
+| `packages/job/src/lib/google-drive.ts` | 修正 | Step 6 |
+| `packages/job/src/lib/discord.ts` | **新規** | Step 7 |
+| `packages/job/src/jobs/sync.ts` | 修正 | Step 7 |
+| `packages/job/src/jobs/generate.ts` | 修正 | Step 7 |
+| `packages/job/src/index.ts` | 修正 | Step 7 |
+| `packages/api/src/routes/runs.ts` | 修正 | Step 8 |
+| `packages/api/src/lib/fetch-with-retry.ts` | **新規** | Step 3 |
+| `.env.example` | 修正 | Step 7-8 |
 
 ---
 
@@ -83,18 +232,5 @@
 - Supabase上のX認証トークン暗号化（別の問題）
 - トークンキャッシング（毎回refresh tokenからaccess token取得は冗長だが、実害は少ない）
 - Secret Manager upsert時のレースコンディション（発生頻度が極めて低い）
-
----
-
-## 変更ファイル一覧
-
-| ファイル | 操作 |
-|---------|------|
-| `packages/job/src/lib/fetch-with-retry.ts` | **新規** |
-| `packages/job/src/lib/google-sheets.ts` | 修正 |
-| `packages/job/src/lib/auth.ts` | 修正 |
-| `packages/job/src/lib/secret-manager.ts` | 修正 |
-| `packages/job/src/lib/google-drive.ts` | 修正 |
-| `packages/job/src/jobs/sync.ts` | 修正 |
-| `packages/api/src/lib/haraka-db-sheet.ts` | 修正 |
-| `packages/api/src/lib/fetch-with-retry.ts` | **新規**（API側用） |
+- Cloud Run Jobsの正式デプロイパイプライン（方式Bへの移行は将来課題）
+- node-cronベースのインプロセススケジューラ（Cloud Runとの相性が悪い）
