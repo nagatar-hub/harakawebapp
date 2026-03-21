@@ -77,8 +77,15 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   }
 
   // --- Secret Manager に refresh_token を保存 ---
+  // state=kecak の場合は KECAK 専用シークレットに保存
+  const state = searchParams.get('state');
+  const isKecak = state === 'kecak';
+  const secretName = isKecak
+    ? 'haraka-oauth-kecak-refresh-token'
+    : 'haraka-oauth-refresh-token';
+
   try {
-    await upsertSecret('haraka-oauth-refresh-token', refreshToken);
+    await upsertSecret(secretName, refreshToken);
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     return NextResponse.json(
@@ -91,9 +98,11 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     );
   }
 
+  const label = isKecak ? 'KECAK シート用' : 'Haraka DB 用';
   return NextResponse.json({
     status: 'ok',
-    message: 'Google OAuth refresh token を Secret Manager に保存しました。',
+    message: `${label} Google OAuth refresh token を Secret Manager に保存しました。`,
+    secret: secretName,
     scope: tokens.scope,
   });
 }

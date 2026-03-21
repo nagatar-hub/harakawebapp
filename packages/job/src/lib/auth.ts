@@ -2,6 +2,9 @@
  * OAuth 認証ヘルパー
  *
  * sync / generate 両ジョブで共通利用
+ *
+ * Haraka DB シートと KECAK シートは異なる Google アカウントに
+ * 紐づいているため、KECAK 用には別の refresh token を使用する。
  */
 
 import { refreshAccessToken } from './google-sheets.js';
@@ -13,7 +16,7 @@ export interface OAuthCredentials {
 }
 
 /**
- * OAuth 認証情報を取得する。
+ * OAuth 認証情報を取得する（Haraka DB シート用）。
  * ローカル: .env から読み込み
  * Cloud Run: Secret Manager から読み込み
  */
@@ -38,9 +41,56 @@ export async function getCredentials(): Promise<OAuthCredentials> {
 }
 
 /**
- * 認証情報を取得し、access token を返す
+ * KECAK シート用 OAuth 認証情報を取得する。
+ * KECAK シートにアクセス権限のある Google アカウントの refresh token を使用。
+ * 未設定の場合はデフォルトの認証情報にフォールバックする。
+ */
+export async function getKecakCredentials(): Promise<OAuthCredentials> {
+  // ローカル開発: KECAK 専用の refresh token があればそれを使用
+  if (process.env.KECAK_GOOGLE_REFRESH_TOKEN) {
+    const clientId = process.env.GOOGLE_CLIENT_ID;
+    const clientSecret = process.env.GOOGLE_CLIENT_SECRET;
+    if (!clientId || !clientSecret) {
+      throw new Error('GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET が未設定です');
+    }
+    return {
+      refreshToken: process.env.KECAK_GOOGLE_REFRESH_TOKEN,
+      clientId,
+      clientSecret,
+    };
+  }
+
+  // Cloud Run: Secret Manager から KECAK 用 refresh token を取得
+  const { getSecret } = await import('./secret-manager.js');
+
+  let kecakRefreshToken: string;
+  try {
+    kecakRefreshToken = await getSecret('haraka-oauth-kecak-refresh-token');
+  } catch {
+    // KECAK 用シークレットが未登録の場合はデフォルトにフォールバック
+    console.warn('[auth] haraka-oauth-kecak-refresh-token が未設定のため、デフォルト認証情報を使用します');
+    return getCredentials();
+  }
+
+  const [clientId, clientSecret] = await Promise.all([
+    getSecret('haraka-oauth-client-id'),
+    getSecret('haraka-oauth-client-secret'),
+  ]);
+  return { refreshToken: kecakRefreshToken, clientId, clientSecret };
+}
+
+/**
+ * 認証情報を取得し、access token を返す（Haraka DB シート用）
  */
 export async function getAccessToken(): Promise<string> {
   const creds = await getCredentials();
+  return refreshAccessToken(creds);
+}
+
+/**
+ * KECAK シート用 access token を返す
+ */
+export async function getKecakAccessToken(): Promise<string> {
+  const creds = await getKecakCredentials();
   return refreshAccessToken(creds);
 }

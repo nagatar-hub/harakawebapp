@@ -578,6 +578,12 @@ export default function RunsPage() {
               </button>
             </>
           )}
+          <a
+            href="/api/auth/google?target=kecak"
+            className="px-4 sm:px-5 py-2 sm:py-2.5 rounded-full text-xs sm:text-sm font-semibold whitespace-nowrap transition-all duration-100 select-none border border-border-card text-text-secondary hover:border-text-primary/50 hover:text-text-primary"
+          >
+            KECAK シート認証
+          </a>
         </div>
       </div>
 
