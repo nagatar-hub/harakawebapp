@@ -62,6 +62,19 @@ steps:
       - '--memory=2Gi'
       - '--set-env-vars=JOB_NAME=generate,TRIGGER=scheduler'
 
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+    entrypoint: 'gcloud'
+    args:
+      - 'run'
+      - 'jobs'
+      - 'update'
+      - 'haraka-watchdog'
+      - '--image=asia-northeast1-docker.pkg.dev/$PROJECT_ID/haraka/haraka-job'
+      - '--region=asia-northeast1'
+      - '--task-timeout=5400'
+      - '--memory=2Gi'
+      - '--set-env-vars=JOB_NAME=watchdog,TRIGGER=watchdog'
+
 images:
   - 'asia-northeast1-docker.pkg.dev/$PROJECT_ID/haraka/haraka-api'
   - 'asia-northeast1-docker.pkg.dev/$PROJECT_ID/haraka/haraka-job'

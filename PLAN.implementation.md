@@ -75,7 +75,7 @@ gcloud alpha monitoring policies create \
 朝9時のスケジュール実行が何らかの理由で失敗・未実行だった場合に、自動でリトライし、結果を Discord に通知する。
 
 ### 方式
-既存の Cloud Run Job インフラを活用し、新しいジョブタイプ `watchdog` を追加する。Cloud Scheduler で朝10時（9時のジョブ完了を待つ余裕をもって）に実行。
+既存の Cloud Run Job インフラを活用し、新しいジョブタイプ `watchdog` を追加する。Cloud Scheduler で朝9:10（9時のジョブ完了を待つ余裕をもって）に実行。
 
 ### 変更ファイル
 - `packages/job/src/index.ts` — watchdog ケース追加
@@ -196,7 +196,7 @@ case 'watchdog':
 #### Cloud Scheduler 設定（デプロイ後に手動実行）
 ```bash
 gcloud scheduler jobs create http haraka-watchdog \
-  --schedule="0 10 * * *" \
+  --schedule="10 9 * * *" \
   --time-zone="Asia/Tokyo" \
   --uri="https://asia-northeast1-run.googleapis.com/apis/run.googleapis.com/v1/namespaces/spectre-tomstocks-20260227/jobs/haraka-watchdog:run" \
   --http-method=POST \

@@ -445,13 +445,29 @@ export async function runGenerate() {
     const elapsed = ((Date.now() - t0) / 1000).toFixed(1);
     console.log(`[generate] 完了: total_pages=${totalPages}, 総時間=${Date.now() - t0}ms`);
 
-    // Discord 通知: 成功
+    // 失敗ページ数を集計
+    const { count: failedPageCount } = await supabase
+      .from('generated_page')
+      .select('*', { count: 'exact', head: true })
+      .eq('run_id', run.id)
+      .eq('status', 'failed');
+    const failedPages = failedPageCount ?? 0;
+    const hasFailures = failedPages > 0;
+
+    if (hasFailures) {
+      console.warn(`[generate] ⚠️ 失敗ページ: ${failedPages}件`);
+    }
+
+    // Discord 通知: 成功（失敗ページありの場合は警告色）
     await sendDiscordNotification({
-      title: '🟢 Generate ジョブ完了',
-      description: `画像生成が正常に完了しました`,
-      color: COLOR.SUCCESS,
+      title: hasFailures ? '🟡 Generate ジョブ完了（一部失敗あり）' : '🟢 Generate ジョブ完了',
+      description: hasFailures
+        ? `画像生成が完了しましたが、${failedPages}ページの生成に失敗しました`
+        : '画像生成が正常に完了しました',
+      color: hasFailures ? COLOR.WARNING : COLOR.SUCCESS,
       fields: [
         { name: '生成ページ数', value: `${totalPages}ページ`, inline: true },
+        ...(hasFailures ? [{ name: '失敗ページ', value: `${failedPages}ページ`, inline: true }] : []),
         { name: '所要時間', value: `${elapsed}秒`, inline: true },
       ],
     });

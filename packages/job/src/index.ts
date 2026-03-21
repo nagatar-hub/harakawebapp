@@ -2,6 +2,7 @@ import { createSupabaseClientFromSecrets } from './lib/supabase.js';
 import { runSync } from './jobs/sync.js';
 import { runGenerate } from './jobs/generate.js';
 import { runRegeneratePage } from './jobs/regenerate-page.js';
+import { runWatchdog } from './jobs/watchdog.js';
 import { sendDiscordNotification, COLOR } from './lib/discord.js';
 
 async function main() {
@@ -18,6 +19,9 @@ async function main() {
         break;
       case 'regenerate-page':
         await runRegeneratePage();
+        break;
+      case 'watchdog':
+        await runWatchdog();
         break;
       case 'healthcheck':
         await runHealthcheck();
