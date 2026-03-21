@@ -104,17 +104,22 @@ export function extractRefreshToken(
  * 必須環境変数の存在を検証し、値を返す。
  * 不足している場合は変数名を含むエラーメッセージを返す。
  */
-export function validateEnvVars(requestUrl?: string): Result<EnvVars> {
+export function validateEnvVars(headers?: Headers): Result<EnvVars> {
   const missing: string[] = [];
 
   const clientId = process.env.GOOGLE_CLIENT_ID;
   const clientSecret = process.env.GOOGLE_CLIENT_SECRET;
 
-  // リクエストURLからベースURLを自動検出。フォールバックとして環境変数・デフォルト値を使用
+  // リクエストヘッダーからベースURLを自動検出（Vercel等のリバースプロキシ対応）
   let baseUrl: string;
-  if (requestUrl) {
-    const url = new URL(requestUrl);
-    baseUrl = url.origin;
+  if (headers) {
+    const host = headers.get('x-forwarded-host') || headers.get('host');
+    const proto = headers.get('x-forwarded-proto') || 'https';
+    if (host) {
+      baseUrl = `${proto}://${host}`;
+    } else {
+      baseUrl = process.env.NEXTAUTH_URL ?? DEFAULT_BASE_URL;
+    }
   } else {
     baseUrl = process.env.NEXTAUTH_URL ?? DEFAULT_BASE_URL;
   }
