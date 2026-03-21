@@ -12,4 +12,6 @@ dist/
 *.md
 supabase/
 docs/
-packages/web/
+packages/web/src/
+packages/web/.next/
+packages/web/node_modules/
