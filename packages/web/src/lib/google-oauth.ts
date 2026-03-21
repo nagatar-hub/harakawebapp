@@ -59,6 +59,7 @@ const DEFAULT_BASE_URL = 'http://localhost:3001';
 export function buildAuthorizationUrl(params: {
   clientId: string;
   redirectUri: string;
+  state?: string;
 }): string {
   const searchParams = new URLSearchParams({
     client_id: params.clientId,
@@ -68,6 +69,10 @@ export function buildAuthorizationUrl(params: {
     access_type: 'offline',
     prompt: 'consent',
   });
+
+  if (params.state) {
+    searchParams.set('state', params.state);
+  }
 
   return `${GOOGLE_AUTH_ENDPOINT}?${searchParams.toString()}`;
 }
