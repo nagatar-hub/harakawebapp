@@ -3,9 +3,7 @@
  *
  * Google OAuth コールバックエンドポイント。
  * Google から受け取った認可コードを使ってトークンを取得し、
- * Phase 0 では取得した tokens を JSON で返す（画面表示確認用）。
- *
- * Phase 1 以降: refresh_token を Secret Manager に保存する処理を追加予定。
+ * refresh_token を Secret Manager に保存する。
  *
  * クエリパラメータ:
  *   code  — Google が発行した認可コード
@@ -18,6 +16,7 @@ import {
   extractRefreshToken,
   validateEnvVars,
 } from '@/lib/google-oauth';
+import { upsertSecret } from '@/lib/secret-manager';
 
 export async function GET(request: NextRequest): Promise<NextResponse> {
   const { searchParams } = request.nextUrl;
@@ -70,18 +69,31 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   const tokens = tokenResult.value;
   const refreshToken = extractRefreshToken(tokens);
 
-  // --- Phase 0: 取得したトークン情報を JSON で返す ---
-  // Phase 1 以降で Secret Manager への保存処理を追加する
+  if (!refreshToken) {
+    return NextResponse.json({
+      status: 'warning',
+      message: 'トークン取得成功。ただし refresh_token が含まれていません。prompt=consent で再認可してください。',
+    });
+  }
+
+  // --- Secret Manager に refresh_token を保存 ---
+  try {
+    await upsertSecret('haraka-oauth-refresh-token', refreshToken);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    return NextResponse.json(
+      {
+        error: 'Secret Manager への保存に失敗しました',
+        detail: message,
+        refresh_token: refreshToken,
+      },
+      { status: 500 }
+    );
+  }
+
   return NextResponse.json({
-    message: 'OAuth tokens retrieved successfully',
-    note: 'Phase 0: tokens displayed for verification. Phase 1 will store refresh_token in Secret Manager.',
-    tokens: {
-      access_token: tokens.access_token,
-      refresh_token: refreshToken,
-      token_type: tokens.token_type,
-      expires_in: tokens.expires_in,
-      scope: tokens.scope,
-      has_refresh_token: refreshToken !== null,
-    },
+    status: 'ok',
+    message: 'Google OAuth refresh token を Secret Manager に保存しました。',
+    scope: tokens.scope,
   });
 }
