@@ -16,7 +16,7 @@
 
 import { createSupabaseClient } from '../lib/supabase.js';
 import { fetchSheetValues } from '../lib/google-sheets.js';
-import { getAccessToken } from '../lib/auth.js';
+import { getAccessToken, getKecakAccessToken } from '../lib/auth.js';
 import { batchInsert, batchUpsert } from '../lib/batch.js';
 import { parseKecakRows } from '../lib/kecak-parser.js';
 import { buildLookupMap } from '../lib/db-lookup.js';
@@ -60,7 +60,8 @@ export async function runSync() {
     // ---- 2. OAuth access token 取得 ----
     await updateProgress(supabase, run.id, 0, 100, '認証中...');
     const accessToken = await getAccessToken();
-    console.log('[sync] Access token 取得完了');
+    const kecakAccessToken = await getKecakAccessToken();
+    console.log('[sync] Access token 取得完了（Haraka DB + KECAK）');
 
     const kecakSpreadsheetId = process.env.KECAK_SPREADSHEET_ID;
     const harakaDbSpreadsheetId = process.env.HARAKA_DB_SPREADSHEET_ID;
@@ -79,7 +80,7 @@ export async function runSync() {
       await updateProgress(supabase, run.id, 5 + fi * 5, 100, `KECAK: ${franchise}...`);
 
       const rows = await fetchSheetValues({
-        accessToken,
+        accessToken: kecakAccessToken,
         spreadsheetId: kecakSpreadsheetId,
         range: `${sheetName}`,
       });
