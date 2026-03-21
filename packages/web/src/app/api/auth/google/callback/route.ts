@@ -40,7 +40,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   }
 
   // --- 環境変数の検証 ---
-  const envResult = validateEnvVars();
+  const envResult = validateEnvVars(request.url);
   if (!envResult.ok) {
     return NextResponse.json(
       { error: 'Configuration error', detail: envResult.error },

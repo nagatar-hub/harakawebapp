@@ -10,11 +10,11 @@
  *   NEXTAUTH_URL         — このアプリのベース URL（省略時: http://localhost:3001）
  */
 
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { buildAuthorizationUrl, validateEnvVars } from '@/lib/google-oauth';
 
-export async function GET(): Promise<NextResponse> {
-  const envResult = validateEnvVars();
+export async function GET(request: NextRequest): Promise<NextResponse> {
+  const envResult = validateEnvVars(request.url);
 
   if (!envResult.ok) {
     return NextResponse.json(
