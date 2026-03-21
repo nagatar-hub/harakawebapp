@@ -11,7 +11,7 @@
  * ページプランは毎回 prepared_card から再生成し、最新の価格フィルターを適用する。
  */
 
-import { createSupabaseClient } from '../lib/supabase.js';
+import { createSupabaseClientFromSecrets } from '../lib/supabase.js';
 import { fetchSheetValues } from '../lib/google-sheets.js';
 import { getAccessToken } from '../lib/auth.js';
 import { composePage } from '../lib/image-composer.js';
@@ -58,7 +58,7 @@ function romanizeLabel(label: string): string {
 // ---------------------------------------------------------------------------
 
 export async function runGenerate() {
-  const supabase = createSupabaseClient();
+  const supabase = await createSupabaseClientFromSecrets();
   const t0 = Date.now();
 
   // ---- 1. 最新の completed run を取得 ----
