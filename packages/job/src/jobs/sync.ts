@@ -16,7 +16,7 @@
 
 import { createSupabaseClientFromSecrets } from '../lib/supabase.js';
 import { fetchSheetValues } from '../lib/google-sheets.js';
-import { getAccessToken, getKecakAccessToken } from '../lib/auth.js';
+import { getAccessToken, getKecakAccessToken, getKecakSpreadsheetId, getHarakaDbSpreadsheetId } from '../lib/auth.js';
 import { batchInsert, batchUpsert } from '../lib/batch.js';
 import { parseKecakRows } from '../lib/kecak-parser.js';
 import { buildLookupMap } from '../lib/db-lookup.js';
@@ -27,6 +27,8 @@ import { deduplicateByListNo } from '../lib/dedup.js';
 import { checkImageHealth } from '../lib/image-health-check.js';
 import { updateProgress, clearProgress } from '../lib/progress.js';
 import { planPages } from '../lib/page-planner.js';
+import { sendDiscordNotification, COLOR } from '../lib/discord.js';
+import { OAuthInvalidGrantError } from '../lib/fetch-with-retry.js';
 import type {
   Database,
   Franchise,
@@ -45,6 +47,7 @@ type GeneratedPageInsert = Database['public']['Tables']['generated_page']['Inser
 // ---------------------------------------------------------------------------
 
 export async function runSync() {
+  const t0 = Date.now();
   const supabase = await createSupabaseClientFromSecrets();
 
   // ---- 1. Run レコード作成 ----
@@ -63,10 +66,8 @@ export async function runSync() {
     const kecakAccessToken = await getKecakAccessToken();
     console.log('[sync] Access token 取得完了（Haraka DB + KECAK）');
 
-    const kecakSpreadsheetId = process.env.KECAK_SPREADSHEET_ID;
-    const harakaDbSpreadsheetId = process.env.HARAKA_DB_SPREADSHEET_ID;
-    if (!kecakSpreadsheetId) throw new Error('KECAK_SPREADSHEET_ID が未設定です');
-    if (!harakaDbSpreadsheetId) throw new Error('HARAKA_DB_SPREADSHEET_ID が未設定です');
+    const kecakSpreadsheetId = await getKecakSpreadsheetId();
+    const harakaDbSpreadsheetId = await getHarakaDbSpreadsheetId();
 
     // ---- 3. KECAK 取得 + raw_import 保存 ----
     await updateProgress(supabase, run.id, 5, 100, 'KECAK インポート中...');
@@ -384,7 +385,34 @@ export async function runSync() {
     }).eq('id', run.id);
 
     await clearProgress(supabase, run.id);
+    const elapsed = ((Date.now() - t0) / 1000).toFixed(1);
     console.log(`[sync] 完了: imported=${totalImported}, prepared=${totalPrepared}, untagged=${totalUntagged}, image_ng=${deadCount}, pages=${totalPages}`);
+
+    // Discord 通知: 成功
+    const fields = [
+      { name: 'インポート', value: `${totalImported}件`, inline: true },
+      { name: 'カード準備', value: `${totalPrepared}件`, inline: true },
+      { name: 'ページ数', value: `${totalPages}ページ`, inline: true },
+      { name: 'タグなし', value: `${totalUntagged}件`, inline: true },
+      { name: '画像NG', value: `${deadCount}件`, inline: true },
+      { name: '価格未記入', value: `${totalPriceMissing}件`, inline: true },
+      { name: '所要時間', value: `${elapsed}秒`, inline: true },
+    ];
+    await sendDiscordNotification({
+      title: '🟢 Sync ジョブ完了',
+      description: process.env.TRIGGER === 'scheduler' ? '朝9時テストラン完了' : 'Sync が正常に完了しました',
+      color: COLOR.SUCCESS,
+      fields,
+    });
+
+    // 画像NG多発の警告
+    if (deadCount > 10) {
+      await sendDiscordNotification({
+        title: '🟡 画像NG多発',
+        description: `画像NG が ${deadCount} 件あります。確認してください。`,
+        color: COLOR.WARNING,
+      });
+    }
 
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
@@ -393,6 +421,22 @@ export async function runSync() {
       error_message: message,
     }).eq('id', run.id);
     await clearProgress(supabase, run.id);
+
+    // Discord 通知: 失敗
+    const isInvalidGrant = err instanceof OAuthInvalidGrantError;
+    await sendDiscordNotification({
+      title: isInvalidGrant ? '🔴 OAuth トークン失効' : '🔴 Sync ジョブ失敗',
+      description: isInvalidGrant
+        ? '再認証が必要です。管理画面からトークンを更新してください。'
+        : message,
+      color: COLOR.ERROR,
+      fields: [
+        { name: 'ジョブ', value: 'sync', inline: true },
+        { name: 'トリガー', value: process.env.TRIGGER || 'manual', inline: true },
+        { name: 'エラー', value: message.substring(0, 1000) },
+      ],
+    });
+
     throw err;
   }
 }
