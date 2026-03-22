@@ -13,7 +13,7 @@
 
 import { createSupabaseClientFromSecrets } from '../lib/supabase.js';
 import { fetchSheetValues } from '../lib/google-sheets.js';
-import { getAccessToken } from '../lib/auth.js';
+import { getAccessToken, getHarakaDbSpreadsheetId } from '../lib/auth.js';
 import { composePage } from '../lib/image-composer.js';
 import { downloadDriveFile, downloadImagesWithConcurrency } from '../lib/google-drive.js';
 import { updateProgress, clearProgress } from '../lib/progress.js';
@@ -157,8 +157,7 @@ export async function runGenerate() {
     const accessToken = await getAccessToken();
     console.log('[generate] Access token 取得完了');
 
-    const harakaDbSpreadsheetId = process.env.HARAKA_DB_SPREADSHEET_ID;
-    if (!harakaDbSpreadsheetId) throw new Error('HARAKA_DB_SPREADSHEET_ID が未設定です');
+    const harakaDbSpreadsheetId = await getHarakaDbSpreadsheetId();
 
     // ---- 4. franchise ごとに画像生成 ----
     let pagesGenerated = 0;

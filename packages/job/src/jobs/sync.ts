@@ -16,7 +16,7 @@
 
 import { createSupabaseClientFromSecrets } from '../lib/supabase.js';
 import { fetchSheetValues } from '../lib/google-sheets.js';
-import { getAccessToken, getKecakAccessToken } from '../lib/auth.js';
+import { getAccessToken, getKecakAccessToken, getKecakSpreadsheetId, getHarakaDbSpreadsheetId } from '../lib/auth.js';
 import { batchInsert, batchUpsert } from '../lib/batch.js';
 import { parseKecakRows } from '../lib/kecak-parser.js';
 import { buildLookupMap } from '../lib/db-lookup.js';
@@ -66,10 +66,8 @@ export async function runSync() {
     const kecakAccessToken = await getKecakAccessToken();
     console.log('[sync] Access token 取得完了（Haraka DB + KECAK）');
 
-    const kecakSpreadsheetId = process.env.KECAK_SPREADSHEET_ID;
-    const harakaDbSpreadsheetId = process.env.HARAKA_DB_SPREADSHEET_ID;
-    if (!kecakSpreadsheetId) throw new Error('KECAK_SPREADSHEET_ID が未設定です');
-    if (!harakaDbSpreadsheetId) throw new Error('HARAKA_DB_SPREADSHEET_ID が未設定です');
+    const kecakSpreadsheetId = await getKecakSpreadsheetId();
+    const harakaDbSpreadsheetId = await getHarakaDbSpreadsheetId();
 
     // ---- 3. KECAK 取得 + raw_import 保存 ----
     await updateProgress(supabase, run.id, 5, 100, 'KECAK インポート中...');

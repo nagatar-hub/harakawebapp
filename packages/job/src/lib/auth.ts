@@ -95,6 +95,36 @@ export async function getKecakAccessToken(): Promise<string> {
   return refreshAccessToken(creds);
 }
 
+// ---------------------------------------------------------------------------
+// スプレッドシート ID 取得（ローカル: env / Cloud Run: Secret Manager）
+// ---------------------------------------------------------------------------
+
+/**
+ * KECAK スプレッドシート ID を取得する。
+ * ローカル: KECAK_SPREADSHEET_ID 環境変数
+ * Cloud Run: Secret Manager (haraka-kecak-spreadsheet-id)
+ */
+export async function getKecakSpreadsheetId(): Promise<string> {
+  if (process.env.KECAK_SPREADSHEET_ID) {
+    return process.env.KECAK_SPREADSHEET_ID;
+  }
+  const { getSecret } = await import('./secret-manager.js');
+  return getSecret('haraka-kecak-spreadsheet-id');
+}
+
+/**
+ * Haraka DB スプレッドシート ID を取得する。
+ * ローカル: HARAKA_DB_SPREADSHEET_ID 環境変数
+ * Cloud Run: Secret Manager (haraka-db-spreadsheet-id)
+ */
+export async function getHarakaDbSpreadsheetId(): Promise<string> {
+  if (process.env.HARAKA_DB_SPREADSHEET_ID) {
+    return process.env.HARAKA_DB_SPREADSHEET_ID;
+  }
+  const { getSecret } = await import('./secret-manager.js');
+  return getSecret('haraka-db-spreadsheet-id');
+}
+
 /**
  * 認証情報の空チェック。空の credential でAPI呼び出ししても
  * invalid_grant になるだけなので、早期にエラーを出す。

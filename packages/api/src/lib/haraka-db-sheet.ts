@@ -16,9 +16,21 @@
  */
 
 import { fetchWithRetry } from './fetch-with-retry.js';
+import { getSecret } from './secret-manager.js';
 
 const GOOGLE_TOKEN_ENDPOINT = 'https://oauth2.googleapis.com/token';
 const GOOGLE_SHEETS_API_BASE = 'https://sheets.googleapis.com/v4/spreadsheets';
+
+async function getHarakaDbSpreadsheetId(): Promise<string | null> {
+  if (process.env.HARAKA_DB_SPREADSHEET_ID) {
+    return process.env.HARAKA_DB_SPREADSHEET_ID;
+  }
+  try {
+    return await getSecret('haraka-db-spreadsheet-id');
+  } catch {
+    return null;
+  }
+}
 
 async function getAccessToken(): Promise<string> {
   const refreshToken = process.env.GOOGLE_REFRESH_TOKEN;
@@ -68,7 +80,7 @@ export async function appendTagToHarakaDB(card: {
   list_no: string | null;
   image_url: string | null;
 }, tag: string): Promise<void> {
-  const spreadsheetId = process.env.HARAKA_DB_SPREADSHEET_ID;
+  const spreadsheetId = await getHarakaDbSpreadsheetId();
   if (!spreadsheetId) {
     console.warn('HARAKA_DB_SPREADSHEET_ID not set, skipping sheet write-back');
     return;
@@ -147,7 +159,7 @@ export async function updateDbSheetCell(
   field: string,
   value: string,
 ): Promise<void> {
-  const spreadsheetId = process.env.HARAKA_DB_SPREADSHEET_ID;
+  const spreadsheetId = await getHarakaDbSpreadsheetId();
   if (!spreadsheetId) {
     console.warn('HARAKA_DB_SPREADSHEET_ID not set, skipping sheet cell update');
     return;

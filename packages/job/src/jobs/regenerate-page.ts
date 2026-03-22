@@ -7,7 +7,7 @@
  */
 
 import { createSupabaseClientFromSecrets } from '../lib/supabase.js';
-import { getAccessToken } from '../lib/auth.js';
+import { getAccessToken, getHarakaDbSpreadsheetId } from '../lib/auth.js';
 import { composePage } from '../lib/image-composer.js';
 import { downloadDriveFile, downloadImagesWithConcurrency } from '../lib/google-drive.js';
 import { fetchSheetValues } from '../lib/google-sheets.js';
@@ -128,7 +128,7 @@ async function _runRegeneratePage(supabase: Awaited<ReturnType<typeof createSupa
 
   // レアリティアイコン
   const rarityIconBuffers = new Map<string, Buffer>();
-  const harakaDbSpreadsheetId = process.env.HARAKA_DB_SPREADSHEET_ID;
+  const harakaDbSpreadsheetId = await getHarakaDbSpreadsheetId();
 
   if (harakaDbSpreadsheetId && profile.rarity_icons) {
     const rarityIcons = profile.rarity_icons as Record<string, string>;
