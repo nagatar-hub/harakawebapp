@@ -24,6 +24,16 @@
 - **フォールバック**: 未設定の場合はメインアカウントの認証情報で代用（ただしKECAKシートの権限がないと失敗する）
 - **備考**: Haraka DB スプレッドシートにはどちらのアカウントからもアクセス可能
 
+### スプレッドシート ID
+
+| シート | ID | URL |
+|--------|-----|-----|
+| Haraka DB | `1OFvy5njgMK-yu13BFSYToPYuLEI1KggdTSgMKuZLJKk` | https://docs.google.com/spreadsheets/d/1OFvy5njgMK-yu13BFSYToPYuLEI1KggdTSgMKuZLJKk/ |
+| KECAK | `1XZypJOZZppxZMckPuRoJDaXWxLhOdwQQhv8ujE4DBFo` | https://docs.google.com/spreadsheets/d/1XZypJOZZppxZMckPuRoJDaXWxLhOdwQQhv8ujE4DBFo/ |
+
+- **Secret Manager**: `haraka-db-spreadsheet-id`, `haraka-kecak-spreadsheet-id`
+- **環境変数（ローカル）**: `HARAKA_DB_SPREADSHEET_ID`, `KECAK_SPREADSHEET_ID`
+
 ### OAuth 再認証
 Web UI の OAuth コールバック（`/api/auth/google/callback`）で `state` パラメータにより保存先を分岐：
 - `state !== 'kecak'` → Haraka DB アカウントのトークンを更新
