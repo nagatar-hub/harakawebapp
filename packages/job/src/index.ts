@@ -2,6 +2,8 @@ import { createSupabaseClientFromSecrets } from './lib/supabase.js';
 import { runSync } from './jobs/sync.js';
 import { runGenerate } from './jobs/generate.js';
 import { runRegeneratePage } from './jobs/regenerate-page.js';
+import { runWatchdog } from './jobs/watchdog.js';
+import { sendDiscordNotification, COLOR } from './lib/discord.js';
 
 async function main() {
   const jobName = process.env.JOB_NAME || 'healthcheck';
@@ -18,6 +20,9 @@ async function main() {
       case 'regenerate-page':
         await runRegeneratePage();
         break;
+      case 'watchdog':
+        await runWatchdog();
+        break;
       case 'healthcheck':
         await runHealthcheck();
         break;
@@ -28,6 +33,22 @@ async function main() {
     process.exit(0);
   } catch (error) {
     console.error(`[Haraka Job] ${jobName} failed:`, error);
+
+    // フォールバック通知（各ジョブ内で通知送信前にクラッシュした場合の保険）
+    try {
+      await sendDiscordNotification({
+        title: `🔴 ジョブ異常終了: ${jobName}`,
+        description: error instanceof Error ? error.message : String(error),
+        color: COLOR.ERROR,
+        fields: [
+          { name: 'ジョブ', value: jobName, inline: true },
+          { name: 'トリガー', value: process.env.TRIGGER || 'unknown', inline: true },
+        ],
+      });
+    } catch {
+      // 通知自体の失敗は無視
+    }
+
     process.exit(1);
   }
 }

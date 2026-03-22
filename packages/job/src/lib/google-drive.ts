@@ -3,7 +3,10 @@
  *
  * テンプレート画像、カード裏面画像、レアリティアイコン等を
  * Google Drive から Buffer としてダウンロードする。
+ * リトライ・タイムアウト付き。
  */
+
+import { fetchWithRetry } from './fetch-with-retry.js';
 
 const DRIVE_API_BASE = 'https://www.googleapis.com/drive/v3/files';
 
@@ -15,9 +18,11 @@ export async function downloadDriveFile(
   fileId: string,
 ): Promise<Buffer> {
   const url = `${DRIVE_API_BASE}/${fileId}?alt=media`;
-  const res = await fetch(url, {
-    headers: { Authorization: `Bearer ${accessToken}` },
-  });
+  const res = await fetchWithRetry(
+    url,
+    { headers: { Authorization: `Bearer ${accessToken}` } },
+    { maxRetries: 3, timeoutMs: 60_000 },
+  );
 
   if (!res.ok) {
     const body = await res.text().catch(() => '');
@@ -42,12 +47,16 @@ export async function downloadImage(
   try {
     if (urlOrDriveId.startsWith('http://') || urlOrDriveId.startsWith('https://')) {
       // 通常の HTTP(S) URL（ブラウザ UA で Cloudflare 等のボット対策に対応）
-      const res = await fetch(urlOrDriveId, {
-        headers: {
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-          Accept: 'image/webp,image/apng,image/*,*/*;q=0.8',
+      const res = await fetchWithRetry(
+        urlOrDriveId,
+        {
+          headers: {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            Accept: 'image/webp,image/apng,image/*,*/*;q=0.8',
+          },
         },
-      });
+        { maxRetries: 2, timeoutMs: 15_000 },
+      );
       if (!res.ok) {
         console.warn(`[downloadImage] HTTP ${res.status} ${res.statusText}: ${urlOrDriveId.substring(0, 100)}`);
         return null;

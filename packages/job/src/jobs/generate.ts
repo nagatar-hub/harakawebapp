@@ -13,12 +13,13 @@
 
 import { createSupabaseClientFromSecrets } from '../lib/supabase.js';
 import { fetchSheetValues } from '../lib/google-sheets.js';
-import { getAccessToken } from '../lib/auth.js';
+import { getAccessToken, getHarakaDbSpreadsheetId } from '../lib/auth.js';
 import { composePage } from '../lib/image-composer.js';
 import { downloadDriveFile, downloadImagesWithConcurrency } from '../lib/google-drive.js';
 import { updateProgress, clearProgress } from '../lib/progress.js';
 import { planPages } from '../lib/page-planner.js';
 import { batchInsert } from '../lib/batch.js';
+import { sendDiscordNotification, COLOR } from '../lib/discord.js';
 import type {
   Database,
   PreparedCardRow,
@@ -156,8 +157,7 @@ export async function runGenerate() {
     const accessToken = await getAccessToken();
     console.log('[generate] Access token 取得完了');
 
-    const harakaDbSpreadsheetId = process.env.HARAKA_DB_SPREADSHEET_ID;
-    if (!harakaDbSpreadsheetId) throw new Error('HARAKA_DB_SPREADSHEET_ID が未設定です');
+    const harakaDbSpreadsheetId = await getHarakaDbSpreadsheetId();
 
     // ---- 4. franchise ごとに画像生成 ----
     let pagesGenerated = 0;
@@ -441,7 +441,35 @@ export async function runGenerate() {
     }).eq('id', run.id);
 
     await clearProgress(supabase, run.id);
+    const elapsed = ((Date.now() - t0) / 1000).toFixed(1);
     console.log(`[generate] 完了: total_pages=${totalPages}, 総時間=${Date.now() - t0}ms`);
+
+    // 失敗ページ数を集計
+    const { count: failedPageCount } = await supabase
+      .from('generated_page')
+      .select('*', { count: 'exact', head: true })
+      .eq('run_id', run.id)
+      .eq('status', 'failed');
+    const failedPages = failedPageCount ?? 0;
+    const hasFailures = failedPages > 0;
+
+    if (hasFailures) {
+      console.warn(`[generate] ⚠️ 失敗ページ: ${failedPages}件`);
+    }
+
+    // Discord 通知: 成功（失敗ページありの場合は警告色）
+    await sendDiscordNotification({
+      title: hasFailures ? '🟡 Generate ジョブ完了（一部失敗あり）' : '🟢 Generate ジョブ完了',
+      description: hasFailures
+        ? `画像生成が完了しましたが、${failedPages}ページの生成に失敗しました`
+        : '画像生成が正常に完了しました',
+      color: hasFailures ? COLOR.WARNING : COLOR.SUCCESS,
+      fields: [
+        { name: '生成ページ数', value: `${totalPages}ページ`, inline: true },
+        ...(hasFailures ? [{ name: '失敗ページ', value: `${failedPages}ページ`, inline: true }] : []),
+        { name: '所要時間', value: `${elapsed}秒`, inline: true },
+      ],
+    });
 
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
@@ -450,6 +478,18 @@ export async function runGenerate() {
       error_message: message,
     }).eq('id', run.id);
     await clearProgress(supabase, run.id);
+
+    // Discord 通知: 失敗
+    await sendDiscordNotification({
+      title: '🔴 Generate ジョブ失敗',
+      description: message,
+      color: COLOR.ERROR,
+      fields: [
+        { name: 'ジョブ', value: 'generate', inline: true },
+        { name: 'エラー', value: message.substring(0, 1000) },
+      ],
+    });
+
     throw err;
   }
 }

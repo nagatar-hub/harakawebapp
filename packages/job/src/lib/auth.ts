@@ -23,11 +23,11 @@ export interface OAuthCredentials {
 export async function getCredentials(): Promise<OAuthCredentials> {
   // ローカル開発: .env に値がある場合はそれを使用
   if (process.env.GOOGLE_REFRESH_TOKEN && process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET) {
-    return {
+    return validateCredentials({
       refreshToken: process.env.GOOGLE_REFRESH_TOKEN,
       clientId: process.env.GOOGLE_CLIENT_ID,
       clientSecret: process.env.GOOGLE_CLIENT_SECRET,
-    };
+    });
   }
 
   // Cloud Run: Secret Manager から取得
@@ -37,7 +37,7 @@ export async function getCredentials(): Promise<OAuthCredentials> {
     getSecret('haraka-oauth-client-id'),
     getSecret('haraka-oauth-client-secret'),
   ]);
-  return { refreshToken, clientId, clientSecret };
+  return validateCredentials({ refreshToken, clientId, clientSecret });
 }
 
 /**
@@ -53,11 +53,11 @@ export async function getKecakCredentials(): Promise<OAuthCredentials> {
     if (!clientId || !clientSecret) {
       throw new Error('GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET が未設定です');
     }
-    return {
+    return validateCredentials({
       refreshToken: process.env.KECAK_GOOGLE_REFRESH_TOKEN,
       clientId,
       clientSecret,
-    };
+    });
   }
 
   // Cloud Run: Secret Manager から KECAK 用 refresh token を取得
@@ -76,7 +76,7 @@ export async function getKecakCredentials(): Promise<OAuthCredentials> {
     getSecret('haraka-oauth-client-id'),
     getSecret('haraka-oauth-client-secret'),
   ]);
-  return { refreshToken: kecakRefreshToken, clientId, clientSecret };
+  return validateCredentials({ refreshToken: kecakRefreshToken, clientId, clientSecret });
 }
 
 /**
@@ -93,4 +93,51 @@ export async function getAccessToken(): Promise<string> {
 export async function getKecakAccessToken(): Promise<string> {
   const creds = await getKecakCredentials();
   return refreshAccessToken(creds);
+}
+
+// ---------------------------------------------------------------------------
+// スプレッドシート ID 取得（ローカル: env / Cloud Run: Secret Manager）
+// ---------------------------------------------------------------------------
+
+/**
+ * KECAK スプレッドシート ID を取得する。
+ * ローカル: KECAK_SPREADSHEET_ID 環境変数
+ * Cloud Run: Secret Manager (haraka-kecak-spreadsheet-id)
+ */
+export async function getKecakSpreadsheetId(): Promise<string> {
+  if (process.env.KECAK_SPREADSHEET_ID) {
+    return process.env.KECAK_SPREADSHEET_ID;
+  }
+  const { getSecret } = await import('./secret-manager.js');
+  return getSecret('haraka-kecak-spreadsheet-id');
+}
+
+/**
+ * Haraka DB スプレッドシート ID を取得する。
+ * ローカル: HARAKA_DB_SPREADSHEET_ID 環境変数
+ * Cloud Run: Secret Manager (haraka-db-spreadsheet-id)
+ */
+export async function getHarakaDbSpreadsheetId(): Promise<string> {
+  if (process.env.HARAKA_DB_SPREADSHEET_ID) {
+    return process.env.HARAKA_DB_SPREADSHEET_ID;
+  }
+  const { getSecret } = await import('./secret-manager.js');
+  return getSecret('haraka-db-spreadsheet-id');
+}
+
+/**
+ * 認証情報の空チェック。空の credential でAPI呼び出ししても
+ * invalid_grant になるだけなので、早期にエラーを出す。
+ */
+function validateCredentials(creds: OAuthCredentials): OAuthCredentials {
+  if (!creds.refreshToken?.trim()) {
+    throw new Error('OAuth refresh token が空です。再認証が必要です。');
+  }
+  if (!creds.clientId?.trim()) {
+    throw new Error('OAuth client ID が空です。');
+  }
+  if (!creds.clientSecret?.trim()) {
+    throw new Error('OAuth client secret が空です。');
+  }
+  return creds;
 }
