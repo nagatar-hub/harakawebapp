@@ -67,6 +67,7 @@ export async function runGenerate() {
     .from('run')
     .select('*')
     .eq('status', 'completed')
+    .eq('store', 'oripark')
     .order('started_at', { ascending: false })
     .limit(1)
     .single<RunRow>();
