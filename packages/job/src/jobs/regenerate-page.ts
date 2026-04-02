@@ -81,6 +81,7 @@ async function _runRegeneratePage(supabase: Awaited<ReturnType<typeof createSupa
   const { data: profile, error: profileErr } = await supabase
     .from('asset_profile')
     .select('*')
+    .eq('store', 'oripark')
     .eq('franchise', page.franchise as 'Pokemon' | 'ONE PIECE' | 'YU-GI-OH!')
     .single<AssetProfileRow>();
 
