@@ -125,6 +125,7 @@ export async function runGenerate() {
       const { data: profile } = await supabase
         .from('asset_profile')
         .select('*')
+        .eq('store', 'oripark')
         .eq('franchise', franchise)
         .single<AssetProfileRow>();
       if (!profile) continue;
@@ -200,6 +201,7 @@ export async function runGenerate() {
       const { data: profile, error: profileError } = await supabase
         .from('asset_profile')
         .select('*')
+        .eq('store', 'oripark')
         .eq('franchise', franchise)
         .single<AssetProfileRow>();
       if (profileError || !profile) throw new Error(`asset_profile 取得失敗 (${franchise}): ${profileError?.message}`);
