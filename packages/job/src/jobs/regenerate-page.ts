@@ -46,7 +46,11 @@ export async function runRegeneratePage() {
     await _runRegeneratePage(supabase, pageId);
   } catch (err) {
     // 失敗時にステータスを更新（ポーリングで検知可能に）
-    await supabase.from('generated_page').update({ status: 'failed' }).eq('id', pageId);
+    const errMsg = err instanceof Error ? err.message : String(err);
+    await supabase.from('generated_page').update({
+      status: 'failed',
+      error_message: errMsg,
+    }).eq('id', pageId);
     throw err;
   }
 }

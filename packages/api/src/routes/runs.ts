@@ -93,6 +93,21 @@ runRoutes.get('/runs/:id/untagged-cards', async (c) => {
   return c.json(data);
 });
 
+/** 指定 run の失敗ページ一覧 */
+runRoutes.get('/runs/:id/failed-pages', async (c) => {
+  const id = c.req.param('id');
+  const supabase = createSupabaseClient();
+  const { data, error } = await supabase
+    .from('generated_page')
+    .select('id, franchise, page_index, page_label, status, error_message, created_at')
+    .eq('run_id', id)
+    .eq('status', 'failed')
+    .order('franchise')
+    .order('page_index');
+  if (error) return c.json({ error: error.message }, 500);
+  return c.json(data);
+});
+
 /** 指定 run の画像NGカード一覧 */
 runRoutes.get('/runs/:id/image-issues', async (c) => {
   const id = c.req.param('id');

@@ -389,9 +389,11 @@ export async function runGenerate() {
             });
 
           if (uploadError) {
-            console.log(`[generate]     Storage アップロード失敗: ${uploadError.message}`);
+            const errMsg = `Storage アップロード失敗: ${uploadError.message}`;
+            console.log(`[generate]     ${errMsg}`);
             await supabase.from('generated_page').update({
               status: 'failed',
+              error_message: errMsg,
             }).eq('id', generatedPage.id);
             return;
           }
@@ -408,9 +410,11 @@ export async function runGenerate() {
 
           console.log(`[generate]     → 生成完了: ${storageKey} (DL=${dlMs}ms, 合成=${composeMs}ms, 計=${Date.now() - tPage}ms)`);
         } catch (composeErr) {
-          console.error(`[generate]     → 合成失敗:`, composeErr);
+          const errMsg = composeErr instanceof Error ? composeErr.message : String(composeErr);
+          console.error(`[generate]     → 合成失敗: ${errMsg}`);
           await supabase.from('generated_page').update({
             status: 'failed',
+            error_message: `合成失敗: ${errMsg}`,
           }).eq('id', generatedPage.id);
         }
       }
