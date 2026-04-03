@@ -3,10 +3,10 @@ steps:
   # API: ビルド → プッシュ → デプロイ
   # ============================================================
   - name: 'gcr.io/cloud-builders/docker'
-    args: ['build', '-t', 'asia-northeast1-docker.pkg.dev/$PROJECT_ID/haraka/haraka-api', '.']
+    args: ['build', '-t', 'asia-northeast1-docker.pkg.dev/$PROJECT_ID/cloud-run-source-deploy/haraka-api', '.']
 
   - name: 'gcr.io/cloud-builders/docker'
-    args: ['push', 'asia-northeast1-docker.pkg.dev/$PROJECT_ID/haraka/haraka-api']
+    args: ['push', 'asia-northeast1-docker.pkg.dev/$PROJECT_ID/cloud-run-source-deploy/haraka-api']
 
   - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
     entrypoint: 'gcloud'
@@ -14,7 +14,7 @@ steps:
       - 'run'
       - 'deploy'
       - 'haraka-api'
-      - '--image=asia-northeast1-docker.pkg.dev/$PROJECT_ID/haraka/haraka-api'
+      - '--image=asia-northeast1-docker.pkg.dev/$PROJECT_ID/cloud-run-source-deploy/haraka-api'
       - '--region=asia-northeast1'
       - '--platform=managed'
       - '--no-cpu-throttling'
@@ -30,11 +30,11 @@ steps:
       - '-f'
       - 'packages/job/Dockerfile'
       - '-t'
-      - 'asia-northeast1-docker.pkg.dev/$PROJECT_ID/haraka/haraka-job'
+      - 'asia-northeast1-docker.pkg.dev/$PROJECT_ID/cloud-run-source-deploy/haraka-job'
       - '.'
 
   - name: 'gcr.io/cloud-builders/docker'
-    args: ['push', 'asia-northeast1-docker.pkg.dev/$PROJECT_ID/haraka/haraka-job']
+    args: ['push', 'asia-northeast1-docker.pkg.dev/$PROJECT_ID/cloud-run-source-deploy/haraka-job']
 
   - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
     entrypoint: 'gcloud'
@@ -43,7 +43,7 @@ steps:
       - 'jobs'
       - 'update'
       - 'haraka-sync'
-      - '--image=asia-northeast1-docker.pkg.dev/$PROJECT_ID/haraka/haraka-job'
+      - '--image=asia-northeast1-docker.pkg.dev/$PROJECT_ID/cloud-run-source-deploy/haraka-job'
       - '--region=asia-northeast1'
       - '--task-timeout=1800'
       - '--memory=2Gi'
@@ -56,7 +56,7 @@ steps:
       - 'jobs'
       - 'update'
       - 'haraka-generate'
-      - '--image=asia-northeast1-docker.pkg.dev/$PROJECT_ID/haraka/haraka-job'
+      - '--image=asia-northeast1-docker.pkg.dev/$PROJECT_ID/cloud-run-source-deploy/haraka-job'
       - '--region=asia-northeast1'
       - '--task-timeout=3600'
       - '--memory=2Gi'
@@ -69,12 +69,12 @@ steps:
       - 'jobs'
       - 'update'
       - 'haraka-watchdog'
-      - '--image=asia-northeast1-docker.pkg.dev/$PROJECT_ID/haraka/haraka-job'
+      - '--image=asia-northeast1-docker.pkg.dev/$PROJECT_ID/cloud-run-source-deploy/haraka-job'
       - '--region=asia-northeast1'
       - '--task-timeout=5400'
       - '--memory=2Gi'
       - '--update-env-vars=JOB_NAME=watchdog,TRIGGER=watchdog'
 
 images:
-  - 'asia-northeast1-docker.pkg.dev/$PROJECT_ID/haraka/haraka-api'
-  - 'asia-northeast1-docker.pkg.dev/$PROJECT_ID/haraka/haraka-job'
+  - 'asia-northeast1-docker.pkg.dev/$PROJECT_ID/cloud-run-source-deploy/haraka-api'
+  - 'asia-northeast1-docker.pkg.dev/$PROJECT_ID/cloud-run-source-deploy/haraka-job'
