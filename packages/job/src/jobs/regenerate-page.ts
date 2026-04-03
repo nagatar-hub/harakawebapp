@@ -6,6 +6,7 @@
  * 価格や画像URLの変更後に再生成すれば反映される。
  */
 
+import sharp from 'sharp';
 import { createSupabaseClientFromSecrets } from '../lib/supabase.js';
 import { getAccessToken, getHarakaDbSpreadsheetId } from '../lib/auth.js';
 import { composePage } from '../lib/image-composer.js';
@@ -157,13 +158,42 @@ async function _runRegeneratePage(supabase: Awaited<ReturnType<typeof createSupa
     }
   }
 
-  // ---- 5. カード画像ダウンロード ----
-  const imageUrls = orderedCards.map(c => c.image_url || c.alt_image_url || null);
-  const imageBuffers = await downloadImagesWithConcurrency(accessToken, imageUrls, 8);
+  // ---- 5. カード画像ダウンロード（image_url → alt_image_url フォールバック） ----
+  const primaryUrls = orderedCards.map(c => c.image_url || c.alt_image_url || null);
+  const primaryBuffers = await downloadImagesWithConcurrency(accessToken, primaryUrls, 8);
+
+  // primary が失敗 or sharp で読めない場合、alt_image_url で再試行
+  const altRetryIndices: number[] = [];
+  for (let ci = 0; ci < orderedCards.length; ci++) {
+    const buf = primaryBuffers[ci];
+    if (!buf && orderedCards[ci].alt_image_url && orderedCards[ci].image_url) {
+      altRetryIndices.push(ci);
+    } else if (buf) {
+      try {
+        await sharp(buf).metadata();
+      } catch {
+        primaryBuffers[ci] = null;
+        if (orderedCards[ci].alt_image_url) {
+          altRetryIndices.push(ci);
+        }
+      }
+    }
+  }
+
+  if (altRetryIndices.length > 0) {
+    const altUrls = altRetryIndices.map(ci => orderedCards[ci].alt_image_url!);
+    const altBuffers = await downloadImagesWithConcurrency(accessToken, altUrls, 8);
+    altRetryIndices.forEach((ci, ai) => {
+      if (altBuffers[ai]) {
+        primaryBuffers[ci] = altBuffers[ai];
+        console.log(`[regenerate-page] alt_image_url で復旧: ${orderedCards[ci].card_name}`);
+      }
+    });
+  }
 
   const cardImageBuffers = new Map<string, Buffer>();
   orderedCards.forEach((card, i) => {
-    const buf = imageBuffers[i];
+    const buf = primaryBuffers[i];
     if (buf) cardImageBuffers.set(card.id, buf);
   });
 

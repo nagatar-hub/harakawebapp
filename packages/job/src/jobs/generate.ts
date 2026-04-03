@@ -11,6 +11,7 @@
  * ページプランは毎回 prepared_card から再生成し、最新の価格フィルターを適用する。
  */
 
+import sharp from 'sharp';
 import { createSupabaseClientFromSecrets } from '../lib/supabase.js';
 import { fetchSheetValues } from '../lib/google-sheets.js';
 import { getAccessToken, getHarakaDbSpreadsheetId } from '../lib/auth.js';
@@ -334,17 +335,50 @@ export async function runGenerate() {
         const currentTemplate = (isBOX && templateBufferBOX) ? templateBufferBOX : templateBuffer;
         const currentCardBack = (isBOX && cardBackBufferBOX) ? cardBackBufferBOX : cardBackBuffer;
 
-        // カード画像のダウンロード
+        // カード画像のダウンロード（image_url → alt_image_url フォールバック）
         const tDl = Date.now();
-        const imageUrls = pageCards.map(c => c.image_url || c.alt_image_url || null);
-        const imageBuffers = await downloadImagesWithConcurrency(accessToken, imageUrls, 8);
+        const primaryUrls = pageCards.map(c => c.image_url || c.alt_image_url || null);
+        const primaryBuffers = await downloadImagesWithConcurrency(accessToken, primaryUrls, 8);
+
+        // primary が失敗 or sharp で読めない場合、alt_image_url で再試行
+        const altRetryIndices: number[] = [];
+        for (let ci = 0; ci < pageCards.length; ci++) {
+          const buf = primaryBuffers[ci];
+          if (!buf && pageCards[ci].alt_image_url && pageCards[ci].image_url) {
+            // primary(image_url)が失敗 → alt で再試行
+            altRetryIndices.push(ci);
+          } else if (buf) {
+            // DLは成功したが sharp で読めるか検証
+            try {
+              await sharp(buf).metadata();
+            } catch {
+              // 画像が壊れている → alt があれば再試行
+              primaryBuffers[ci] = null;
+              if (pageCards[ci].alt_image_url) {
+                altRetryIndices.push(ci);
+              }
+            }
+          }
+        }
+
+        if (altRetryIndices.length > 0) {
+          const altUrls = altRetryIndices.map(ci => pageCards[ci].alt_image_url!);
+          const altBuffers = await downloadImagesWithConcurrency(accessToken, altUrls, 8);
+          altRetryIndices.forEach((ci, ai) => {
+            if (altBuffers[ai]) {
+              primaryBuffers[ci] = altBuffers[ai];
+              console.log(`[generate]     alt_image_url で復旧: ${pageCards[ci].card_name}`);
+            }
+          });
+        }
+
         const dlMs = Date.now() - tDl;
 
         let dlOk = 0;
         let dlFail = 0;
         const cardImageBuffers = new Map<string, Buffer>();
         pageCards.forEach((card, i) => {
-          const buf = imageBuffers[i];
+          const buf = primaryBuffers[i];
           if (buf) {
             cardImageBuffers.set(card.id, buf);
             dlOk++;
