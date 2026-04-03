@@ -124,12 +124,14 @@ export async function runGenerate() {
       if (validCards.length === 0) continue;
 
       // asset_profile + rule 取得
-      const { data: profile } = await supabase
+      const { data: profileArr } = await supabase
         .from('asset_profile')
         .select('*')
         .eq('store', 'oripark')
         .eq('franchise', franchise)
-        .single<AssetProfileRow>();
+        .limit(1)
+        .returns<AssetProfileRow[]>();
+      const profile = profileArr?.[0] ?? null;
       if (!profile) continue;
 
       const { data: rules } = await supabase
@@ -200,12 +202,14 @@ export async function runGenerate() {
       const cardById = new Map((cards ?? []).map(c => [c.id, c]));
 
       // asset_profile 取得
-      const { data: profile, error: profileError } = await supabase
+      const { data: profileArr2, error: profileError } = await supabase
         .from('asset_profile')
         .select('*')
         .eq('store', 'oripark')
         .eq('franchise', franchise)
-        .single<AssetProfileRow>();
+        .limit(1)
+        .returns<AssetProfileRow[]>();
+      const profile = profileArr2?.[0] ?? null;
       if (profileError || !profile) throw new Error(`asset_profile 取得失敗 (${franchise}): ${profileError?.message}`);
       if (!profile.layout_config) throw new Error(`layout_config が未設定 (${franchise})`);
 

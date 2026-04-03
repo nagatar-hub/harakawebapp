@@ -83,14 +83,16 @@ async function _runRegeneratePage(supabase: Awaited<ReturnType<typeof createSupa
   console.log(`[regenerate-page] カード数: ${orderedCards.length}`);
 
   // ---- 3. アセットプロファイル取得 ----
-  const { data: profile, error: profileErr } = await supabase
+  const { data: profiles, error: profileErr } = await supabase
     .from('asset_profile')
     .select('*')
     .eq('store', 'oripark')
     .eq('franchise', page.franchise as 'Pokemon' | 'ONE PIECE' | 'YU-GI-OH!')
-    .single<AssetProfileRow>();
+    .limit(1)
+    .returns<AssetProfileRow[]>();
 
-  if (profileErr || !profile) throw new Error(`プロファイルが見つかりません: ${profileErr?.message}`);
+  const profile = profiles?.[0] ?? null;
+  if (profileErr || !profile) throw new Error(`プロファイルが見つかりません (store=oripark, franchise=${page.franchise}): ${profileErr?.message ?? '該当なし'}`);
 
   const layout: LayoutConfig = profile.layout_config as LayoutConfig;
 
