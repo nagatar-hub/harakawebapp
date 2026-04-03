@@ -444,6 +444,7 @@ export async function runGenerate() {
             status: 'generated',
             image_key: storageKey,
             image_url: publicUrl.publicUrl,
+            error_message: null,
           }).eq('id', generatedPage.id);
 
           console.log(`[generate]     → 生成完了: ${storageKey} (DL=${dlMs}ms, 合成=${composeMs}ms, 計=${Date.now() - tPage}ms)`);

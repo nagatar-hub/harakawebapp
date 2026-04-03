@@ -263,6 +263,7 @@ async function _runRegeneratePage(supabase: Awaited<ReturnType<typeof createSupa
     status: 'generated',
     image_key: storageKey,
     image_url: publicUrl.publicUrl,
+    error_message: null,
   }).eq('id', pageId);
 
   console.log(`[regenerate-page] 完了: ${storageKey}`);
