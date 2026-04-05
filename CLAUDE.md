@@ -38,3 +38,14 @@
 Web UI の OAuth コールバック（`/api/auth/google/callback`）で `state` パラメータにより保存先を分岐：
 - `state !== 'kecak'` → Haraka DB アカウントのトークンを更新
 - `state === 'kecak'` → KECAK アカウントのトークンを更新
+
+## GCP デプロイ構成（重要）
+
+- **GCP プロジェクト**: `spectre-tomstocks-20260227`（プロジェクト名: Spectre）
+  - **※ `hamon-api` ではない。全リソースは Spectre プロジェクトに存在する**
+- **Artifact Registry**: `asia-northeast1-docker.pkg.dev/spectre-tomstocks-20260227/cloud-run-source-deploy/`
+- **Cloud Run サービス**: `haraka-api`, `haraka-manman-api`（リージョン: asia-northeast1）
+- **Cloud Run ジョブ**: `haraka-sync`, `haraka-generate`, `haraka-watchdog`, `haraka-job`, `haraka-healthcheck`
+- **デプロイ方法**: `gcloud builds submit --config=cloudbuild.yaml`（プロジェクトを `spectre-tomstocks-20260227` に設定してから実行）
+- **API の Dockerfile**: ルートの `Dockerfile`（shared + api + job を全てビルド。再生成は API 内の `fork()` で job を実行）
+- **Job の Dockerfile**: `packages/job/Dockerfile`
