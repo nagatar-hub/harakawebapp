@@ -46,11 +46,12 @@ export async function runRegeneratePage() {
   try {
     await _runRegeneratePage(supabase, pageId);
   } catch (err) {
-    // 失敗時にステータスを更新（ポーリングで検知可能に）
+    // 失敗時: ステータスを generated に戻して元画像を維持（ギャラリーから消えないようにする）
+    // error_message にエラー内容を記録し、ポーリング側で検知可能にする
     const errMsg = err instanceof Error ? err.message : String(err);
     await supabase.from('generated_page').update({
-      status: 'failed',
-      error_message: errMsg,
+      status: 'generated',
+      error_message: `再生成失敗: ${errMsg}`,
     }).eq('id', pageId);
     throw err;
   }

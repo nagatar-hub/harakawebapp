@@ -50,8 +50,8 @@ galleryRoutes.get('/gallery/images', async (c) => {
 
   let query = supabase
     .from('generated_page')
-    .select('id, run_id, franchise, page_index, page_label, card_ids, image_key, image_url, status, created_at, run:run_id(started_at)')
-    .eq('status', 'generated')
+    .select('id, run_id, franchise, page_index, page_label, card_ids, image_key, image_url, status, error_message, created_at, run:run_id(started_at)')
+    .in('status', ['generated', 'pending', 'failed'])
     .like('image_key', `${prefix}%`)
     .order('created_at', { ascending: false })
     .order('franchise')
@@ -376,7 +376,8 @@ galleryRoutes.post('/gallery/pages/:pageId/regenerate', async (c) => {
   if (pageErr || !page) return c.json({ error: 'Page not found' }, 404);
 
   // ステータスを pending に更新（ポーリングで完了検知するため）
-  await supabase.from('generated_page').update({ status: 'pending' }).eq('id', pageId);
+  // error_message をクリアして前回の失敗状態をリセット
+  await supabase.from('generated_page').update({ status: 'pending', error_message: null }).eq('id', pageId);
 
   // 子プロセスで再生成ジョブを起動（index.ts経由）
   const jobEntry = path.resolve(__dirname, '..', '..', '..', 'job', 'dist', 'index.js');
