@@ -176,6 +176,8 @@ export async function runSync() {
     // ---- 6. Spectre 取込 ----
     await updateProgress(supabase, run.id, 40, 100, 'Spectre 取込中...');
     console.log('[sync] SpectreMapping 取得中...');
+    // Spectre の list_no|grade → tag マップ（交差処理で使用）
+    const spectreTagMap = new Map<string, string>();
     try {
       const spectreRows = await fetchSheetValues({
         accessToken,
@@ -186,9 +188,15 @@ export async function runSync() {
       if (spectreRows.length > 1) {
         const spectreCards = parseSpectreRows(spectreRows, 'Pokemon', run.id);
         if (spectreCards.length > 0) {
+          // 交差処理用に list_no|grade → tag を記録
+          for (const sc of spectreCards) {
+            if (sc.list_no && sc.tag) {
+              spectreTagMap.set(`${sc.list_no}|${sc.grade ?? ''}`, sc.tag);
+            }
+          }
           await batchInsert(supabase, 'prepared_card', spectreCards as unknown as Record<string, unknown>[]);
           totalPrepared += spectreCards.length;
-          console.log(`[sync] Spectre カード: ${spectreCards.length}件 追加`);
+          console.log(`[sync] Spectre カード: ${spectreCards.length}件 追加（交差判定用: ${spectreTagMap.size}件）`);
         }
       }
     } catch (spectreErr) {
@@ -228,6 +236,55 @@ export async function runSync() {
         }
         console.log(`[sync]   ${franchise}: ${removedCount}件 重複除外`);
       }
+    }
+
+    // ---- 7b. Spectre ∩ KECAK 交差処理 ----
+    // SpectreMapping と KECAK の両方にあるカードだけを TOP に残す
+    if (spectreTagMap.size > 0) {
+      console.log('[sync] Spectre ∩ KECAK 交差処理...');
+      let tagUpdated = 0;
+      let spectreOnlyRemoved = 0;
+
+      for (const franchise of FRANCHISES) {
+        const { data: cards, error: cardsError } = await supabase
+          .from('prepared_card')
+          .select('*')
+          .eq('run_id', run.id)
+          .eq('franchise', franchise)
+          .returns<PreparedCardRow[]>();
+        if (cardsError) throw new Error(`prepared_card 取得失敗: ${cardsError.message}`);
+        if (!cards || cards.length === 0) continue;
+
+        // source='kecak' で Spectre にもある → tag を Spectre の tag に上書き
+        const updateIds: { id: string; tag: string }[] = [];
+        for (const card of cards) {
+          if (card.source !== 'kecak' || !card.list_no) continue;
+          const key = `${card.list_no}|${card.grade ?? ''}`;
+          const spectreTag = spectreTagMap.get(key);
+          if (spectreTag) {
+            updateIds.push({ id: card.id, tag: spectreTag });
+          }
+        }
+
+        for (const { id, tag } of updateIds) {
+          await supabase.from('prepared_card').update({ tag }).eq('id', id);
+        }
+        tagUpdated += updateIds.length;
+
+        // source='spectre'（KECAK にない）→ 削除
+        const spectreOnlyIds = cards
+          .filter(c => c.source === 'spectre')
+          .map(c => c.id);
+
+        for (let i = 0; i < spectreOnlyIds.length; i += 100) {
+          const batch = spectreOnlyIds.slice(i, i + 100);
+          await supabase.from('prepared_card').delete().in('id', batch);
+        }
+        spectreOnlyRemoved += spectreOnlyIds.length;
+      }
+
+      totalPrepared -= spectreOnlyRemoved;
+      console.log(`[sync] 交差処理完了: KECAK→TOP タグ付与 ${tagUpdated}件, Spectreのみ削除 ${spectreOnlyRemoved}件`);
     }
 
     // ---- 8. 画像ヘルスチェック ----
