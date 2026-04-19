@@ -20,6 +20,7 @@ steps:
       - '--no-cpu-throttling'
       - '--timeout=300'
       - '--memory=1Gi'
+      - '--update-env-vars=TZ=Asia/Tokyo'
 
   # ============================================================
   # Job: ビルド → プッシュ → Cloud Run Jobs 更新
