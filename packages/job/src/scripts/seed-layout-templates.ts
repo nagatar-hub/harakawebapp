@@ -146,8 +146,51 @@ async function main() {
   }
 
   // ---- 1. 新規 21 レイアウト（検出結果から） ----
+
+  // 1 枚レイアウトは、バナー下から価格ボックス上端までの縦領域を有効活用するために
+  // カード自体を拡大して中央寄せする。検出器の値（cardY=415 / cardWidth=658 / cardHeight=919）を
+  // そのまま使うとカードが小さく浮いて見えるため、ここで直接オーバーライドする。
+  const SINGLE_CARD_OVERRIDE = {
+    cardY: 330,       // 検出値 415 → 330（+約 9% 拡大後に priceHighY=1334 と 4px マージン）
+    cardWidth: 716,   // 658 → 716 (+9%)
+    cardHeight: 1000, // 919 → 1000 (+9%)
+    startX: 262,      // (1240 - 716) / 2, カード中央配置を再計算
+  };
+
+  // レアリティアイコンはカード幅に比例、上端はみ出し量は 40 枠基準 (cardH=170 / offsetY=-10 → 5.88%)
+  // をカード高さに比例させる。これで拡大レイアウトでもカード画像の上端にアイコン上端が揃う。
+  const RARITY_ICON_RATIO = 0.45;
+  const RARITY_ICON_OFFSET_Y_RATIO = -10 / 170;
+  const scaleRarityIcon = (cardWidth: number, cardHeight: number) => {
+    const px = Math.max(20, Math.round(cardWidth * RARITY_ICON_RATIO));
+    const offsetY = Math.round(cardHeight * RARITY_ICON_OFFSET_Y_RATIO);
+    return { rarityIconWidth: px, rarityIconHeight: px, rarityIconOffsetY: offsetY };
+  };
+
   console.log('\n[seed-layout] === 新規 21 レイアウト ===');
   for (const d of detected) {
+    let layoutConfig: LayoutConfig = d.layoutConfig;
+
+    if (d.slots === 1) {
+      layoutConfig = {
+        ...d.layoutConfig,
+        startX: SINGLE_CARD_OVERRIDE.startX,
+        cardWidth: SINGLE_CARD_OVERRIDE.cardWidth,
+        cardHeight: SINGLE_CARD_OVERRIDE.cardHeight,
+        rows: d.layoutConfig.rows.map((r, i) =>
+          i === 0 ? { ...r, cardY: SINGLE_CARD_OVERRIDE.cardY } : r,
+        ),
+        ...scaleRarityIcon(SINGLE_CARD_OVERRIDE.cardWidth, SINGLE_CARD_OVERRIDE.cardHeight),
+      };
+    } else {
+      // 2/4/6 枠以上はカードサイズ・cardY は検出値をそのまま使い、カード下端が priceHighY に
+      // 接する配置にする（以前の UPWARD_SHIFT_BY_SLOTS による上方向シフトは撤去、浮きを解消）。
+      layoutConfig = {
+        ...d.layoutConfig,
+        ...scaleRarityIcon(d.layoutConfig.cardWidth, d.layoutConfig.cardHeight),
+      };
+    }
+
     await upsertLayout({
       store: 'oripark',
       franchise: d.franchise,
@@ -160,7 +203,7 @@ async function main() {
       img_height: d.detected.imgHeight,
       template_storage_path: d.templateStoragePath,
       card_back_storage_path: d.cardBackStoragePath,
-      layout_config: d.layoutConfig,
+      layout_config: layoutConfig,
       skip_price_low: false,
       is_default: false,
       is_active: true,
