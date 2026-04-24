@@ -76,7 +76,44 @@ export type AssetProfileRow = {
   price_format: string;
   layout_config: LayoutConfig | null;
   rarity_icons: Record<string, string> | null;
+  template_storage_path: string | null;
+  card_back_storage_path: string | null;
+  template_box_storage_path: string | null;
+  card_back_box_storage_path: string | null;
   created_at: string;
+};
+
+// --- レイアウトテンプレート ---
+export type LayoutTemplateRow = {
+  id: string;
+  store: string;
+  franchise: 'Pokemon' | 'ONE PIECE' | 'YU-GI-OH!';
+  name: string;
+  slug: string;
+  grid_cols: number;
+  grid_rows: number;
+  total_slots: number;
+  img_width: number;
+  img_height: number;
+  template_storage_path: string;
+  card_back_storage_path: string;
+  layout_config: LayoutConfig;
+  skip_price_low: boolean;
+  is_default: boolean;
+  is_active: boolean;
+  priority: number;
+  created_at: string;
+  updated_at: string;
+};
+
+export type RarityIconRow = {
+  id: string;
+  franchise: 'Pokemon' | 'ONE PIECE' | 'YU-GI-OH!' | null;
+  name: string;
+  storage_path: string;
+  drive_id: string | null;
+  created_at: string;
+  updated_at: string;
 };
 
 export type ImageStatus = 'unchecked' | 'ok' | 'fallback' | 'dead';
@@ -224,6 +261,7 @@ export type GeneratedPageRow = {
   image_url: string | null;
   status: PageStatus;
   error_message: string | null;
+  layout_template_id: string | null;
   created_at: string;
 };
 
@@ -278,12 +316,32 @@ export type Database = {
       };
       generated_page: {
         Row: GeneratedPageRow;
-        Insert: Omit<GeneratedPageRow, 'id' | 'created_at' | 'image_key' | 'image_url' | 'status' | 'error_message'> & {
+        Insert: Omit<GeneratedPageRow, 'id' | 'created_at' | 'image_key' | 'image_url' | 'status' | 'error_message' | 'layout_template_id'> & {
           id?: string; created_at?: string;
           image_key?: string | null; image_url?: string | null; status?: PageStatus;
           error_message?: string | null;
+          layout_template_id?: string | null;
         };
         Update: Partial<Omit<GeneratedPageRow, 'id' | 'created_at'>>;
+        Relationships: [];
+      };
+      layout_template: {
+        Row: LayoutTemplateRow;
+        Insert: Omit<LayoutTemplateRow, 'id' | 'created_at' | 'updated_at' | 'store' | 'img_width' | 'img_height' | 'skip_price_low' | 'is_default' | 'is_active' | 'priority'> & {
+          id?: string; created_at?: string; updated_at?: string;
+          store?: string; img_width?: number; img_height?: number;
+          skip_price_low?: boolean; is_default?: boolean; is_active?: boolean; priority?: number;
+        };
+        Update: Partial<Omit<LayoutTemplateRow, 'id' | 'created_at'>>;
+        Relationships: [];
+      };
+      rarity_icon: {
+        Row: RarityIconRow;
+        Insert: Omit<RarityIconRow, 'id' | 'created_at' | 'updated_at' | 'drive_id' | 'franchise'> & {
+          id?: string; created_at?: string; updated_at?: string;
+          drive_id?: string | null; franchise?: 'Pokemon' | 'ONE PIECE' | 'YU-GI-OH!' | null;
+        };
+        Update: Partial<Omit<RarityIconRow, 'id' | 'created_at'>>;
         Relationships: [];
       };
       db_card: {
