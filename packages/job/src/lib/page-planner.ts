@@ -81,12 +81,21 @@ export type PagePlan = {
 // グループ → 複数ページへの割付
 // ---------------------------------------------------------------------------
 
+/** 価格（price_high）降順ソート */
+function sortByPriceDesc(cards: PreparedCardRow[]): PreparedCardRow[] {
+  return [...cards].sort((a, b) => (b.price_high ?? 0) - (a.price_high ?? 0));
+}
+
 /**
- * 指定カード群を price_high 降順でソート後、最適な layout 組合せに振り分ける。
+ * 指定カード群を最適な layout 組合せに振り分ける。
  *
- * - 小さいレイアウトから順に上位カードを詰める（= 高価格を spotlight）
- * - 組合せが決まらない（候補 0 等）場合は空配列
- * - 1 組合せでページ数 1 → label そのまま、複数ページ → `${label}`, `${label}-2`, ...
+ * **並び順は呼び出し側の責任**（この関数では再ソートしない）。
+ * - isolate/merge: 単一タグなので呼び出し側で価格降順にしてから渡す。
+ * - group: rule 定義順にタグ別で集め、各タグ内で価格降順にしたものを連結してから渡す。
+ * - メインタグ独立: 同一タグ内で価格降順にして渡す。
+ *
+ * 小さいレイアウトから順に先頭カードを詰めるので、結果的に最高額のカードが少枠ページで
+ * spotlight される。1 組合せでページ数 1 → label そのまま、複数 → `${label}-2`, ...
  */
 function assignGroupToLayouts(
   cards: PreparedCardRow[],
@@ -95,15 +104,14 @@ function assignGroupToLayouts(
 ): PagePlan[] {
   if (cards.length === 0) return [];
 
-  const sorted = [...cards].sort((a, b) => (b.price_high ?? 0) - (a.price_high ?? 0));
-  const combo = selectLayoutCombination(sorted.length, layouts);
+  const combo = selectLayoutCombination(cards.length, layouts);
   if (!combo || combo.layouts.length === 0) return [];
 
   const plans: PagePlan[] = [];
   let cursor = 0;
   combo.layouts.forEach((layout, idx) => {
     const slots = layout.total_slots;
-    const chunk = sorted.slice(cursor, cursor + slots);
+    const chunk = cards.slice(cursor, cursor + slots);
     cursor += slots;
     const pageLabel = idx === 0 ? baseLabel : `${baseLabel}-${idx + 1}`;
     plans.push({
@@ -133,7 +141,7 @@ function assignBoxGroup(
     return assignGroupToLayouts(cards, layouts, baseLabel);
   }
 
-  const sorted = [...cards].sort((a, b) => (b.price_high ?? 0) - (a.price_high ?? 0));
+  const sorted = sortByPriceDesc(cards);
   const slots = boxLayout.total_slots;
   const plans: PagePlan[] = [];
   for (let i = 0; i < sorted.length; i += slots) {
@@ -203,11 +211,12 @@ export function planPages(
     switch (rule.behavior) {
       case 'isolate':
       case 'merge': {
+        const sortedMatched = sortByPriceDesc(matched);
         // BOX タグは専用レイアウト（box_8x5）を使用
         if (rule.tag_pattern === 'BOX' && rule.match_type === 'exact') {
-          pages.push(...assignBoxGroup(matched, layouts, rule.tag_pattern));
+          pages.push(...assignBoxGroup(sortedMatched, layouts, rule.tag_pattern));
         } else {
-          pages.push(...assignGroupToLayouts(matched, layouts, rule.tag_pattern));
+          pages.push(...assignGroupToLayouts(sortedMatched, layouts, rule.tag_pattern));
         }
         break;
       }
@@ -217,16 +226,28 @@ export function planPages(
   }
 
   // -- group rules --
+  // rule 定義順（groupRules は sortedRules の順で push されている = priority 降順 + 元の配列順）
+  // ごとに該当カードを集め、各 rule 内で価格降順。タグ間の順序は rule の順序を維持する。
   for (const [groupKey, groupRules] of groupMap) {
-    const matched: PreparedCardRow[] = [];
-    for (const id of remaining) {
-      const card = cardById.get(id)!;
-      if (groupRules.some(r => matchesRule(card.tag, r))) matched.push(card);
+    const ordered: PreparedCardRow[] = [];
+    const consumed = new Set<string>();
+    for (const rule of groupRules) {
+      const subset: PreparedCardRow[] = [];
+      for (const id of remaining) {
+        if (consumed.has(id)) continue;
+        const card = cardById.get(id)!;
+        if (matchesRule(card.tag, rule)) subset.push(card);
+      }
+      if (subset.length === 0) continue;
+      for (const c of sortByPriceDesc(subset)) {
+        consumed.add(c.id);
+        ordered.push(c);
+      }
     }
-    if (matched.length === 0) continue;
-    for (const c of matched) remaining.delete(c.id);
+    if (ordered.length === 0) continue;
+    for (const c of ordered) remaining.delete(c.id);
 
-    pages.push(...assignGroupToLayouts(matched, layouts, groupKey));
+    pages.push(...assignGroupToLayouts(ordered, layouts, groupKey));
   }
 
   // -- 残り: メインタグごとに独立割当 --
@@ -259,7 +280,7 @@ export function planPages(
 
     // 同じ baseLabel が 2 回目以降なら丸数字を付けて区別
     const effectiveLabel = seen === 1 ? baseLabel : `${baseLabel}${toCircledNumber(seen)}`;
-    pages.push(...assignGroupToLayouts(bucket, layouts, effectiveLabel));
+    pages.push(...assignGroupToLayouts(sortByPriceDesc(bucket), layouts, effectiveLabel));
   }
 
   return pages;
