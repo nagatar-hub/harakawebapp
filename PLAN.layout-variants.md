@@ -461,3 +461,25 @@ function selectLayoutCombination(
 6. **Phase 5**：疎通・E2E・スクショで回帰確認
 
 実装はこの PLAN ファイルに沿って進めます。確認ポイント（Phase 2 末の可視化 PNG など）で一度止まって相談させてください。
+
+---
+
+## TODO（運用・恒久対策）
+
+### DB ↔ Storage 不整合の堅牢化
+
+2026-04-24 の作業中に、`generated_page.status='generated'` かつ `image_url` が設定されているのに、実際の Storage オブジェクトは存在しない（404）というケースが発生した。原因は「以前の generate 時にレコード更新後、Storage アップロードが失敗したまま `status` がリセットされなかった」と推測される。
+
+**対策案**（`generate.ts` / `image-composer.ts`）：
+1. **順序の担保**: Storage の upload が成功してから `generated_page.status='generated'` に遷移させる。現状 `regenerate-page.ts` は `upload` → `update` の順（OK）なので、`generate.ts` 側も同じ順序になっているか確認。
+2. **upload 失敗時の状態**: エラー時は `status='error'`（or `failed`）に寄せ、`error_message` をセット。再生成ポーリング側で拾えるようにする。現状 `regenerate-page.ts` は失敗時 `status='generated'` に戻す設計で、これはギャラリーから消さないための措置。DB 上の画像が「古いもののままでも最低限見える」ようにする狙い。
+3. **watchdog**: 定期的に `generated_page.image_url` を HEAD して 404 のレコードを検出、`error_message` を自動で立てる運用タスクを検討。
+4. **PNG マジックバイト検証**: 画像ダウンロード系スクリプト（開発時のサンプル取得含む）では `89 50 4E 47 0D 0A 1A 0A` を検証し、違えば `.png` で保存しない。今回の 17:09 頃の事故（API エラー JSON を `.png` で保存）を防ぐ。
+
+### ルール未設定時の BOX 扱い
+
+`ONE PIECE` の `BOX` タグは現状 `rule` テーブルに設定がなく、`page-planner.ts` L207 の BOX 判定（`rule.tag_pattern === 'BOX' && rule.match_type === 'exact'` かつ `behavior='isolate'`）を通らないため、`grid_2x1` などの通常レイアウトで生成される。
+
+**対応**: 運用側で `/tags` 画面から `franchise='ONE PIECE', tag_pattern='BOX', match_type='exact', behavior='isolate', priority=90` を追加。コード変更は不要。
+
+`YU-GI-OH!` も同様に `BOX` ルールがない場合は要追加（今回の run では BOX タグ自体が存在しなかったため未検出）。
