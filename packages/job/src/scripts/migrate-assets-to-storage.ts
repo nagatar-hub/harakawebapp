@@ -19,6 +19,7 @@
  *   npx tsx packages/job/src/scripts/migrate-assets-to-storage.ts
  */
 
+import { createHash } from 'node:crypto';
 import { createSupabaseClientFromSecrets } from '../lib/supabase.js';
 import { getAccessToken, getHarakaDbSpreadsheetId } from '../lib/auth.js';
 import { downloadDriveFile } from '../lib/google-drive.js';
@@ -33,8 +34,22 @@ const FRANCHISE_SLUG: Record<Franchise, string> = {
   'YU-GI-OH!': 'yugioh',
 };
 
-function sanitizeFileName(name: string): string {
-  return name.replace(/[^a-zA-Z0-9._\-ぁ-んァ-ヶ一-龯]/g, '_');
+/**
+ * Supabase Storage キー用に ASCII 安全なファイル名を生成する。
+ *
+ * 優先順：
+ *   1. 日本語名の末尾 "（XXX）" ブラケット内 ASCII コード（例: "ノーマルレア（NR）" → "NR"）
+ *   2. ASCII だけで構成される場合は英数字・`_.-` のみを残す
+ *   3. それ以外は MD5 短縮ハッシュ（name → 12 桁）
+ */
+function safeIconFileName(name: string): string {
+  const bracket = name.match(/[（(]\s*([A-Za-z0-9_\-]+)\s*[）)]/);
+  if (bracket) return bracket[1];
+
+  const asciiOnly = name.replace(/[^A-Za-z0-9._\-]/g, '');
+  if (asciiOnly.length >= 2) return asciiOnly;
+
+  return createHash('md5').update(name).digest('hex').slice(0, 12);
 }
 
 async function migrateDriveToStorage(params: {
@@ -65,10 +80,11 @@ async function main() {
     const { data: profiles, error } = await supabase
       .from('asset_profile')
       .select('*')
+      .eq('store', 'oripark')
       .eq('franchise', franchise)
       .returns<AssetProfileRow[]>();
     if (error || !profiles || profiles.length === 0) {
-      console.warn(`[migrate]   スキップ: profile 未登録`);
+      console.warn(`[migrate]   スキップ: profile 未登録 (store=oripark, franchise=${franchise})`);
       continue;
     }
     const profile = profiles[0];
@@ -167,7 +183,7 @@ async function main() {
     const driveId = row[1]?.trim();
     if (!name || !driveId) continue;
 
-    const safeName = sanitizeFileName(name);
+    const safeName = safeIconFileName(name);
     const storagePath = `rarity-icons/${safeName}.png`;
 
     try {

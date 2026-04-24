@@ -176,10 +176,11 @@ async function main() {
     const { data: profiles, error: profErr } = await supabase
       .from('asset_profile')
       .select('*')
+      .eq('store', 'oripark')
       .eq('franchise', franchise)
       .returns<AssetProfileRow[]>();
     if (profErr || !profiles || profiles.length === 0) {
-      console.warn(`[seed-layout]   スキップ: asset_profile 未登録 (${franchise})`);
+      console.warn(`[seed-layout]   スキップ: asset_profile 未登録 (store=oripark, franchise=${franchise})`);
       continue;
     }
     const profile = profiles[0];
