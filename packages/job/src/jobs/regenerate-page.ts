@@ -205,6 +205,7 @@ async function _runRegeneratePage(supabase: Awaited<ReturnType<typeof createSupa
     cards: orderedCards,
     layout,
     assetProfile: profile,
+    gridCols: layoutRow.grid_cols,
     rarityIconBuffers,
     cardImageBuffers,
     dateText,

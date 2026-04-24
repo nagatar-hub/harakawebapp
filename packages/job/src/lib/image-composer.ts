@@ -28,6 +28,8 @@ export interface ComposePageParams {
   layout: LayoutConfig;
   /** アセットプロファイル */
   assetProfile: AssetProfileRow;
+  /** このページのグリッド列数（省略時は assetProfile.grid_cols にフォールバック） */
+  gridCols?: number;
   /** レアリティアイコン: rarity_icon_url → Buffer */
   rarityIconBuffers?: Map<string, Buffer>;
   /** カード画像: card.id → Buffer */
@@ -124,6 +126,7 @@ export async function composePage(params: ComposePageParams): Promise<Buffer> {
     cards,
     layout,
     assetProfile,
+    gridCols,
     rarityIconBuffers,
     cardImageBuffers,
     dateText,
@@ -134,7 +137,7 @@ export async function composePage(params: ComposePageParams): Promise<Buffer> {
     totalSlots,
   } = params;
 
-  const cols = assetProfile.grid_cols;
+  const cols = gridCols ?? assetProfile.grid_cols;
   const composites: OverlayOptions[] = [];
 
   // カード裏面をリサイズしておく

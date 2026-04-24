@@ -417,6 +417,7 @@ export async function runGenerate() {
             cards: pageCards,
             layout,
             assetProfile: assetProfile,
+            gridCols: layoutTemplate.grid_cols,
             rarityIconBuffers,
             cardImageBuffers,
             dateText,
