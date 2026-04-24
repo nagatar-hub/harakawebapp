@@ -32,10 +32,22 @@ async function getHarakaDbSpreadsheetId(): Promise<string | null> {
   }
 }
 
+async function resolveCredential(envName: string, secretName: string): Promise<string | null> {
+  if (process.env[envName]) return process.env[envName] as string;
+  try {
+    return await getSecret(secretName);
+  } catch {
+    return null;
+  }
+}
+
 async function getAccessToken(): Promise<string> {
-  const refreshToken = process.env.GOOGLE_REFRESH_TOKEN;
-  const clientId = process.env.GOOGLE_CLIENT_ID;
-  const clientSecret = process.env.GOOGLE_CLIENT_SECRET;
+  // env 未設定時は Secret Manager にフォールバック（Cloud Run に Secret 注入漏れがあっても動かすため）
+  const [refreshToken, clientId, clientSecret] = await Promise.all([
+    resolveCredential('GOOGLE_REFRESH_TOKEN', 'haraka-oauth-refresh-token'),
+    resolveCredential('GOOGLE_CLIENT_ID', 'haraka-oauth-client-id'),
+    resolveCredential('GOOGLE_CLIENT_SECRET', 'haraka-oauth-client-secret'),
+  ]);
 
   if (!refreshToken || !clientId || !clientSecret) {
     throw new Error('Google OAuth credentials not configured');
