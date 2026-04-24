@@ -5,6 +5,61 @@ import { createSupabaseClient } from '../lib/supabase.js';
 
 export const galleryRoutes = new Hono();
 
+/**
+ * カード枚数に合う最小枠の layout_template_id を返す。
+ * - BOX レイアウト（slug='box_8x5'）は対象外（BOX ページは固定維持）
+ * - is_active = true の中から、total_slots >= cardCount を満たす最小枠を選ぶ
+ * - 全候補が cardCount より小さい場合は最大枠を返す
+ */
+async function pickLayoutForCardCount(
+  supabase: ReturnType<typeof createSupabaseClient>,
+  franchise: string,
+  cardCount: number,
+): Promise<string | null> {
+  const { data: layouts, error } = await supabase
+    .from('layout_template')
+    .select('id,slug,total_slots')
+    .eq('store', 'oripark')
+    .eq('franchise', franchise as 'Pokemon' | 'ONE PIECE' | 'YU-GI-OH!')
+    .eq('is_active', true);
+  if (error || !layouts) return null;
+  const candidates = (layouts as { id: string; slug: string; total_slots: number }[])
+    .filter(l => l.slug !== 'box_8x5')
+    .sort((a, b) => a.total_slots - b.total_slots);
+  if (candidates.length === 0) return null;
+  const fit = candidates.find(l => l.total_slots >= cardCount);
+  return (fit ?? candidates[candidates.length - 1]).id;
+}
+
+/** カード枚数変更後、BOX 以外のページなら layout_template_id を最小枠に追従させる */
+async function syncLayoutToCardCount(
+  supabase: ReturnType<typeof createSupabaseClient>,
+  pageId: string,
+  cardCount: number,
+): Promise<void> {
+  const { data: row } = await supabase
+    .from('generated_page')
+    .select('franchise,layout_template_id')
+    .eq('id', pageId)
+    .single();
+  if (!row) return;
+  const page = row as { franchise: string; layout_template_id: string | null };
+
+  if (page.layout_template_id) {
+    const { data: cur } = await supabase
+      .from('layout_template')
+      .select('slug')
+      .eq('id', page.layout_template_id)
+      .single();
+    if ((cur as { slug?: string } | null)?.slug === 'box_8x5') return; // BOX 固定
+  }
+
+  const next = await pickLayoutForCardCount(supabase, page.franchise, cardCount);
+  if (next && next !== page.layout_template_id) {
+    await supabase.from('generated_page').update({ layout_template_id: next }).eq('id', pageId);
+  }
+}
+
 /** 日付一覧: generated_page の created_at から DISTINCT 日付を抽出 */
 galleryRoutes.get('/gallery/dates', async (c) => {
   const supabase = createSupabaseClient();
@@ -321,6 +376,9 @@ galleryRoutes.post('/gallery/pages/:pageId/cards', async (c) => {
 
   if (error) return c.json({ error: error.message }, 500);
 
+  // 枚数変化に合わせて layout_template_id を自動切替（BOX 以外）
+  await syncLayoutToCardCount(supabase, pageId, newIds.length);
+
   // 追加したカードのデータを返す
   const { data: card } = await supabase
     .from('prepared_card')
@@ -357,6 +415,9 @@ galleryRoutes.delete('/gallery/pages/:pageId/cards/:cardId', async (c) => {
     .eq('id', pageId);
 
   if (error) return c.json({ error: error.message }, 500);
+
+  // 枚数変化に合わせて layout_template_id を自動切替（BOX 以外）
+  await syncLayoutToCardCount(supabase, pageId, newIds.length);
 
   return c.json({ status: 'ok', remaining: newIds.length });
 });
