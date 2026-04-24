@@ -33,10 +33,13 @@ const BLACK_THRESHOLD = 80;
 // 矩形候補のフィルタ
 const MIN_BOX_WIDTH = 60;
 const MIN_BOX_HEIGHT = 20;
-const MAX_BOX_WIDTH = 600;
-const MAX_BOX_HEIGHT = 300;
+// 1 枚テンプレは価格ボックスが ~658x317 と大きい。画像幅 1240 の半分強を許容。
+const MAX_BOX_WIDTH = 900;
+const MAX_BOX_HEIGHT = 400;
 const MIN_FILL_RATIO = 0.01; // 輪郭は薄いので下限だけ
-const MAX_FILL_RATIO = 0.40; // 塗りつぶし矩形は除外（価格バーは輪郭のみ）
+// 価格ボックスは黒枠の輪郭のみ（fill ≈ 0.03-0.05）。
+// 文字「オリ」などは塗りが濃い（fill > 0.15）ので、しきい値を 0.08 に締めて除外。
+const MAX_FILL_RATIO = 0.08;
 const MIN_ASPECT_RATIO = 1.2; // width / height の下限（landscape 矩形）
 const ROW_Y_TOLERANCE = 25;   // 同一行とみなす Y 差（px）
 
