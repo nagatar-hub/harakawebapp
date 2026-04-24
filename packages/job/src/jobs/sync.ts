@@ -399,13 +399,12 @@ export async function runSync() {
         .returns<RuleRow[]>();
       if (rulesError) throw new Error(`rule 取得失敗: ${rulesError.message}`);
 
-      // layout_template 取得
+      // layout_template 取得（is_active=false も含む。box_8x5 等は slug 指定で拾うため）
       const { data: layouts, error: layoutsError } = await supabase
         .from('layout_template')
         .select('*')
         .eq('store', 'oripark')
         .eq('franchise', franchise)
-        .eq('is_active', true)
         .returns<LayoutTemplateRow[]>();
       if (layoutsError) throw new Error(`layout_template 取得失敗 (${franchise}): ${layoutsError.message}`);
       if (!layouts || layouts.length === 0) {

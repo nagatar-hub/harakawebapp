@@ -16,10 +16,12 @@ import sharp from 'sharp';
 import type { LayoutConfig, RowConfig } from '@haraka/shared';
 
 // ---------------------------------------------------------------------------
-// 既存 Pokemon 40 枠から拾った比率（カード位置推定に使用）
+// 新規レイアウトでのカード寸法推定
 // ---------------------------------------------------------------------------
-export const CARD_ASPECT_W_OVER_PRICE = 118 / 140; // カード幅 / 価格ボックス幅
-export const CARD_ASPECT_H_OVER_W = 170 / 118;      // カード高 / カード幅
+// カードを価格ボックスの幅いっぱいに広げる（少枠レイアウトでカードを大きく見せるため）。
+// 高さは TCG カード標準比率（63:88 ≈ 1.397）に従う。
+export const CARD_ASPECT_W_OVER_PRICE = 1.0;
+export const CARD_ASPECT_H_OVER_W = 88 / 63;
 export const DATE_X_DEFAULT = 900;
 export const DATE_Y_DEFAULT = 1650;
 export const RARITY_ICON_OFFSET_X = 5;

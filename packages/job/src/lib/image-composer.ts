@@ -212,7 +212,10 @@ export async function composePage(params: ComposePageParams): Promise<Buffer> {
 
     // ---- 価格テキスト ----
     const priceX = layout.priceStartX + col * layout.colWidth;
-    const fontSize = layout.isSmallCard ? 14 : 16;
+    // 価格ボックスの高さに比例してフォントを拡大。40 枠（priceBoxHeight=30）時に 16px 相当、
+    // 少枠レイアウトで priceBoxHeight が大きいときは自動で大きくなる。
+    const smallBias = layout.isSmallCard ? 0.53 : 0.57;
+    const fontSize = Math.max(14, Math.round(layout.priceBoxHeight * smallBias));
 
     if (card.price_high && card.price_high > 0) {
       // price_high（赤）

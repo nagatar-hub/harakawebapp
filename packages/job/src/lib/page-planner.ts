@@ -116,6 +116,39 @@ function assignGroupToLayouts(
   return plans;
 }
 
+/**
+ * BOX タグ（rule.tag_pattern === 'BOX'）用に固定 box_8x5 レイアウトに割り当てる。
+ * 動作は旧版の挙動踏襲：40 枠単位で分割、価格降順、label は "BOX" / "BOX-2" ...
+ */
+function assignBoxGroup(
+  cards: PreparedCardRow[],
+  layouts: LayoutTemplateRow[],
+  baseLabel: string,
+): PagePlan[] {
+  if (cards.length === 0) return [];
+
+  const boxLayout = layouts.find(l => l.slug === 'box_8x5');
+  if (!boxLayout) {
+    // BOX レイアウト未登録なら通常 DP へフォールバック
+    return assignGroupToLayouts(cards, layouts, baseLabel);
+  }
+
+  const sorted = [...cards].sort((a, b) => (b.price_high ?? 0) - (a.price_high ?? 0));
+  const slots = boxLayout.total_slots;
+  const plans: PagePlan[] = [];
+  for (let i = 0; i < sorted.length; i += slots) {
+    const chunk = sorted.slice(i, i + slots);
+    const idx = Math.floor(i / slots);
+    const pageLabel = idx === 0 ? baseLabel : `${baseLabel}-${idx + 1}`;
+    plans.push({
+      label: pageLabel,
+      cardIds: chunk.map(c => c.id),
+      layoutTemplateId: boxLayout.id,
+    });
+  }
+  return plans;
+}
+
 // ---------------------------------------------------------------------------
 // メイン関数
 // ---------------------------------------------------------------------------
@@ -170,7 +203,12 @@ export function planPages(
     switch (rule.behavior) {
       case 'isolate':
       case 'merge': {
-        pages.push(...assignGroupToLayouts(matched, layouts, rule.tag_pattern));
+        // BOX タグは専用レイアウト（box_8x5）を使用
+        if (rule.tag_pattern === 'BOX' && rule.match_type === 'exact') {
+          pages.push(...assignBoxGroup(matched, layouts, rule.tag_pattern));
+        } else {
+          pages.push(...assignGroupToLayouts(matched, layouts, rule.tag_pattern));
+        }
         break;
       }
       case 'exclude':

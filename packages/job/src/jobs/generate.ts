@@ -147,7 +147,6 @@ export async function runGenerate() {
         .select('*')
         .eq('store', 'oripark')
         .eq('franchise', franchise)
-        .eq('is_active', true)
         .returns<LayoutTemplateRow[]>();
       if (!layouts || layouts.length === 0) {
         throw new Error(`layout_template が未登録です (${franchise})。seed-layout-templates を先に実行してください`);
