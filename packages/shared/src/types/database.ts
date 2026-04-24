@@ -14,6 +14,15 @@ export type LayoutConfig = {
   rarityIconOffsetY?: number;
   rarityIconWidth?: number;
   rarityIconHeight?: number;
+  /**
+   * 全行共通の Y 微調整（旧版では generate.ts に franchise 分岐でハードコードされていた）
+   * layout_template ごとに保持する形に移行。
+   */
+  layoutAdjust?: { cardYDelta: number; priceYDelta: number };
+  /** 行別の価格 Y 微調整 */
+  rowPriceAdjust?: Record<number, { priceHighYDelta?: number; priceLowYDelta?: number }>;
+  /** 行別のカード Y 微調整 */
+  rowCardAdjust?: Record<number, number>;
 };
 
 export type RowConfig = {

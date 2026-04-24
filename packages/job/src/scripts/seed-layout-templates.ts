@@ -33,6 +33,46 @@ const FRANCHISE_SLUG: Record<Franchise, string> = {
   'YU-GI-OH!': 'yugioh',
 };
 
+/**
+ * 既存 40 枠レイアウトに対する行別 Y 微調整。
+ * 旧版の generate.ts / regenerate-page.ts にハードコードされていた値を
+ * layout_template 化するため、franchise 単位で移植する。
+ */
+const LEGACY_40_SLOT_ADJUSTMENTS: Record<Franchise, {
+  layoutAdjust: { cardYDelta: number; priceYDelta: number };
+  rowPriceAdjust: Record<number, { priceHighYDelta?: number; priceLowYDelta?: number }>;
+  rowCardAdjust?: Record<number, number>;
+}> = {
+  'Pokemon': {
+    layoutAdjust: { cardYDelta: -2, priceYDelta: 3 },
+    rowPriceAdjust: {
+      1: { priceHighYDelta: 4, priceLowYDelta: 5 },
+      2: { priceLowYDelta: 2 },
+      3: { priceHighYDelta: 3, priceLowYDelta: 1.5 },
+      4: { priceHighYDelta: 4, priceLowYDelta: 3 },
+    },
+  },
+  'ONE PIECE': {
+    layoutAdjust: { cardYDelta: -2, priceYDelta: 3 },
+    rowPriceAdjust: {
+      1: { priceHighYDelta: 4, priceLowYDelta: 5 },
+      2: { priceLowYDelta: 2 },
+      3: { priceHighYDelta: 3, priceLowYDelta: 1.5 },
+      4: { priceHighYDelta: 4, priceLowYDelta: 3 },
+    },
+  },
+  'YU-GI-OH!': {
+    layoutAdjust: { cardYDelta: 4, priceYDelta: 0 },
+    rowPriceAdjust: {
+      1: { priceHighYDelta: 4, priceLowYDelta: 5 },
+      2: { priceLowYDelta: 2 },
+      3: { priceHighYDelta: 3, priceLowYDelta: 1.5 },
+      4: { priceHighYDelta: 4, priceLowYDelta: 3 },
+    },
+    rowCardAdjust: { 1: 8, 2: 3, 3: 3, 4: 3 },
+  },
+};
+
 interface DetectedResult {
   franchise: Franchise;
   franchiseSlug: string;
@@ -155,7 +195,15 @@ async function main() {
       );
     }
 
-    // 通常 40 枠
+    // 通常 40 枠（旧版のハードコード行調整を layout_config に取り込んで保存）
+    const adj = LEGACY_40_SLOT_ADJUSTMENTS[franchise];
+    const layoutConfigWithAdj: LayoutConfig = {
+      ...profile.layout_config,
+      layoutAdjust: adj.layoutAdjust,
+      rowPriceAdjust: adj.rowPriceAdjust,
+      rowCardAdjust: adj.rowCardAdjust,
+    };
+
     await upsertLayout({
       store: 'oripark',
       franchise,
@@ -168,7 +216,7 @@ async function main() {
       img_height: profile.img_height,
       template_storage_path: profile.template_storage_path,
       card_back_storage_path: profile.card_back_storage_path,
-      layout_config: profile.layout_config,
+      layout_config: layoutConfigWithAdj,
       skip_price_low: false,
       is_default: true,
       is_active: true,
@@ -190,7 +238,7 @@ async function main() {
         img_height: profile.img_height,
         template_storage_path: profile.template_box_storage_path,
         card_back_storage_path: cardBackForBox,
-        layout_config: profile.layout_config,
+        layout_config: layoutConfigWithAdj,
         skip_price_low: true,
         is_default: false,
         is_active: false, // BOX 用は page-planner の通常選択対象外（明示指定時のみ）

@@ -16,7 +16,8 @@ import { createSupabaseClientFromSecrets } from '../lib/supabase.js';
 import { fetchSheetValues } from '../lib/google-sheets.js';
 import { getAccessToken, getHarakaDbSpreadsheetId } from '../lib/auth.js';
 import { composePage } from '../lib/image-composer.js';
-import { downloadDriveFile, downloadImagesWithConcurrency } from '../lib/google-drive.js';
+import { downloadImagesWithConcurrency } from '../lib/google-drive.js';
+import { downloadTemplateAsset } from '../lib/asset-storage.js';
 import { updateProgress, clearProgress } from '../lib/progress.js';
 import { planPages } from '../lib/page-planner.js';
 import { batchInsert } from '../lib/batch.js';
@@ -25,10 +26,10 @@ import type {
   Database,
   PreparedCardRow,
   AssetProfileRow,
-  LayoutConfig,
   GeneratedPageRow,
   RuleRow,
   LayoutTemplateRow,
+  RarityIconRow,
 } from '@haraka/shared';
 import { FRANCHISES } from '@haraka/shared';
 
@@ -203,7 +204,7 @@ export async function runGenerate() {
       }
       console.log(`[generate]   ページ数: ${generatedPages.length}`);
 
-      // このfranchiseのprepared_cardを取得（cardById マップ構築用）
+      // このfranchiseのprepared_cardを取得
       const { data: cards, error: cardsError } = await supabase
         .from('prepared_card')
         .select('*')
@@ -214,7 +215,7 @@ export async function runGenerate() {
 
       const cardById = new Map((cards ?? []).map(c => [c.id, c]));
 
-      // asset_profile 取得
+      // asset_profile 取得（rarity_icons JSONB / font_family / price_format の参照用）
       const { data: profileArr2, error: profileError } = await supabase
         .from('asset_profile')
         .select('*')
@@ -224,54 +225,55 @@ export async function runGenerate() {
         .returns<AssetProfileRow[]>();
       const profile = profileArr2?.[0] ?? null;
       if (profileError || !profile) throw new Error(`asset_profile 取得失敗 (${franchise}): ${profileError?.message}`);
-      if (!profile.layout_config) throw new Error(`layout_config が未設定 (${franchise})`);
 
-      const layout = profile.layout_config as LayoutConfig;
+      // 全 layout_template 取得（ページ単位で切替えるため全件キャッシュ）
+      const neededLayoutIds = Array.from(
+        new Set(generatedPages.map(p => p.layout_template_id).filter((v): v is string => !!v)),
+      );
+      const { data: layoutRows, error: layoutErr } = await supabase
+        .from('layout_template')
+        .select('*')
+        .in('id', neededLayoutIds.length > 0 ? neededLayoutIds : ['00000000-0000-0000-0000-000000000000'])
+        .returns<LayoutTemplateRow[]>();
+      if (layoutErr) throw new Error(`layout_template 取得失敗 (${franchise}): ${layoutErr.message}`);
+      const layoutById = new Map<string, LayoutTemplateRow>((layoutRows ?? []).map(l => [l.id, l]));
 
-      // テンプレート + カード裏面ダウンロード
-      const templateFileId = profile.template_image;
-      const cardBackFileId = profile.card_back_image;
-      if (!templateFileId || !cardBackFileId) {
-        console.log(`[generate]   テンプレート/カード裏面未設定（スキップ）`);
-        continue;
-      }
-
+      // このfranchiseで使う layout_template ごとにテンプレ PNG + カード裏面 PNG を並列DL
       const tTemplate = Date.now();
-      console.log(`[generate]   テンプレート/カード裏面ダウンロード中...`);
-      const [templateBuffer, cardBackBuffer] = await Promise.all([
-        downloadDriveFile(accessToken, templateFileId),
-        downloadDriveFile(accessToken, cardBackFileId),
-      ]);
-      console.log(`[generate]   テンプレートDL: ${Date.now() - tTemplate}ms`);
+      const templateCache = new Map<string, Buffer>();
+      const cardBackCache = new Map<string, Buffer>();
+      await Promise.all([...layoutById.values()].map(async (l) => {
+        const [tpl, back] = await Promise.all([
+          downloadTemplateAsset({
+            supabase, storagePath: l.template_storage_path, driveId: null,
+            accessToken, label: `${franchise}/${l.slug} テンプレ`,
+          }),
+          downloadTemplateAsset({
+            supabase, storagePath: l.card_back_storage_path, driveId: null,
+            accessToken, label: `${franchise}/${l.slug} カード裏`,
+          }),
+        ]);
+        templateCache.set(l.id, tpl);
+        cardBackCache.set(l.id, back);
+      }));
+      console.log(`[generate]   ${layoutById.size}種のテンプレDL: ${Date.now() - tTemplate}ms`);
 
-      // BOX テンプレート
-      const extendedLayout = profile.layout_config as LayoutConfig & {
-        templateFileId_BOX?: string;
-        cardBackId_BOX?: string;
-      };
-      let templateBufferBOX: Buffer | null = null;
-      let cardBackBufferBOX: Buffer | null = null;
-      if (extendedLayout.templateFileId_BOX) {
-        try {
-          [templateBufferBOX, cardBackBufferBOX] = await Promise.all([
-            downloadDriveFile(accessToken, extendedLayout.templateFileId_BOX),
-            extendedLayout.cardBackId_BOX
-              ? downloadDriveFile(accessToken, extendedLayout.cardBackId_BOX)
-              : Promise.resolve(cardBackBuffer),
-          ]);
-        } catch {
-          console.log(`[generate]   BOXテンプレートダウンロード失敗（通常テンプレートを使用）`);
-        }
-      }
-
-      // レアリティアイコンダウンロード
+      // レアリティアイコンは rarity_icon テーブル優先、無ければシート + Drive
       const rarityIconBuffers = new Map<string, Buffer>();
+      const { data: rarityRows } = await supabase
+        .from('rarity_icon')
+        .select('*')
+        .or(`franchise.eq.${franchise},franchise.is.null`)
+        .returns<RarityIconRow[]>();
+      const rarityByName = new Map<string, RarityIconRow>();
+      for (const r of rarityRows ?? []) rarityByName.set(r.name, r);
+
       if (!rarityIconMap) {
         try {
           const iconRows = await fetchSheetValues({
             accessToken,
             spreadsheetId: harakaDbSpreadsheetId,
-            range: 'RarityIcons!A2:B100',
+            range: 'RarityIcons!A2:B500',
           });
           rarityIconMap = new Map<string, string>();
           for (const row of iconRows) {
@@ -279,9 +281,9 @@ export async function runGenerate() {
             const driveId = row[1]?.trim();
             if (name && driveId) rarityIconMap.set(name, driveId);
           }
-          console.log(`[generate] RarityIcons シート読込: ${rarityIconMap.size}件`);
+          console.log(`[generate] RarityIcons シート読込: ${rarityIconMap.size}件（フォールバック用）`);
         } catch (e) {
-          console.log(`[generate] RarityIcons シート読込失敗:`, e);
+          console.log(`[generate] RarityIcons シート読込失敗（ignore）:`, e);
           rarityIconMap = new Map();
         }
       }
@@ -293,45 +295,29 @@ export async function runGenerate() {
           rarityIconBuffers.set(rarityName, rarityIconCache.get(rarityName)!);
           continue;
         }
-        const driveId = rarityIconMap.get(rarityName);
-        if (!driveId) {
-          console.log(`[generate]     レアリティアイコン未登録: ${rarityName}`);
-          continue;
-        }
         try {
-          const buf = await downloadDriveFile(accessToken, driveId);
+          const icon = rarityByName.get(rarityName);
+          const storagePath = icon?.storage_path ?? null;
+          const driveId = icon?.drive_id ?? rarityIconMap.get(rarityName) ?? null;
+          const buf = await downloadTemplateAsset({
+            supabase, storagePath, driveId, accessToken, label: `rarity/${rarityName}`,
+          });
           rarityIconBuffers.set(rarityName, buf);
           rarityIconCache.set(rarityName, buf);
-        } catch {
-          console.log(`[generate]     アイコンダウンロード失敗: ${rarityName} (${driveId})`);
+        } catch (err) {
+          const msg = err instanceof Error ? err.message : String(err);
+          console.log(`[generate]     レアリティアイコン取得失敗: ${rarityName} — ${msg}`);
         }
       }
       if (neededRarities.size > 0) {
-        console.log(`[generate]   レアリティアイコン: ${rarityIconBuffers.size}/${neededRarities.size}種ダウンロード`);
+        console.log(`[generate]   レアリティアイコン: ${rarityIconBuffers.size}/${neededRarities.size}種`);
       }
 
       // 各ページの画像を並列生成（同時5ページ）
       const PAGE_CONCURRENCY = 5;
-
-      // レイアウト微調整（franchise共通）
-      const layoutAdjust = franchise === 'YU-GI-OH!'
-        ? { cardYDelta: 4, priceYDelta: 0 }
-        : { cardYDelta: -2, priceYDelta: 3 };
-
-      const rowPriceAdjust: Record<number, { priceHighYDelta?: number; priceLowYDelta?: number }> = {
-        1: { priceHighYDelta: 4, priceLowYDelta: 5 },
-        2: { priceLowYDelta: 2 },
-        3: { priceHighYDelta: 3, priceLowYDelta: 1.5 },
-        4: { priceHighYDelta: 4, priceLowYDelta: 3 },
-      };
-
-      const rowCardAdjust = franchise === 'YU-GI-OH!'
-        ? { 1: 8, 2: 3, 3: 3, 4: 3 } as Record<number, number>
-        : undefined;
-
       const safeFranchise = franchise.replace(/[^a-zA-Z0-9._-]/g, '') || 'franchise';
-      const pages = generatedPages; // narrowed non-null reference
-      const assetProfile = profile; // narrowed non-null reference
+      const pages = generatedPages;
+      const assetProfile = profile;
 
       async function generateOnePage(pageIdx: number) {
         const tPage = Date.now();
@@ -348,9 +334,22 @@ export async function runGenerate() {
           });
 
         const label = generatedPage.page_label ?? '';
-        const isBOX = label === 'BOX' || label.startsWith('BOX-');
-        const currentTemplate = (isBOX && templateBufferBOX) ? templateBufferBOX : templateBuffer;
-        const currentCardBack = (isBOX && cardBackBufferBOX) ? cardBackBufferBOX : cardBackBuffer;
+        const layoutTemplate = generatedPage.layout_template_id
+          ? layoutById.get(generatedPage.layout_template_id)
+          : null;
+        if (!layoutTemplate) {
+          const errMsg = `layout_template が未設定: page_id=${generatedPage.id} layout_template_id=${generatedPage.layout_template_id}`;
+          console.error(`[generate]     ${errMsg}`);
+          await supabase.from('generated_page').update({
+            status: 'failed', error_message: errMsg,
+          }).eq('id', generatedPage.id);
+          return;
+        }
+
+        const layout = layoutTemplate.layout_config;
+        const currentTemplate = templateCache.get(layoutTemplate.id)!;
+        const currentCardBack = cardBackCache.get(layoutTemplate.id)!;
+        const totalSlotsForLayout = layoutTemplate.total_slots;
 
         // カード画像のダウンロード（image_url → alt_image_url フォールバック）
         const tDl = Date.now();
@@ -421,11 +420,11 @@ export async function runGenerate() {
             rarityIconBuffers,
             cardImageBuffers,
             dateText,
-            skipPriceLow: isBOX,
-            layoutAdjust,
-            rowPriceAdjust,
-            rowCardAdjust,
-            totalSlots: assetProfile.total_slots,
+            skipPriceLow: layoutTemplate.skip_price_low,
+            layoutAdjust: layout.layoutAdjust,
+            rowPriceAdjust: layout.rowPriceAdjust,
+            rowCardAdjust: layout.rowCardAdjust,
+            totalSlots: totalSlotsForLayout,
           });
           const composeMs = Date.now() - tCompose;
 

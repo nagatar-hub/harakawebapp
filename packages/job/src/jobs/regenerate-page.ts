@@ -8,15 +8,16 @@
 
 import sharp from 'sharp';
 import { createSupabaseClientFromSecrets } from '../lib/supabase.js';
-import { getAccessToken, getHarakaDbSpreadsheetId } from '../lib/auth.js';
+import { getAccessToken } from '../lib/auth.js';
 import { composePage } from '../lib/image-composer.js';
-import { downloadDriveFile, downloadImagesWithConcurrency } from '../lib/google-drive.js';
-import { fetchSheetValues } from '../lib/google-sheets.js';
+import { downloadImagesWithConcurrency } from '../lib/google-drive.js';
+import { downloadTemplateAsset } from '../lib/asset-storage.js';
 import type {
   PreparedCardRow,
   AssetProfileRow,
-  LayoutConfig,
   GeneratedPageRow,
+  LayoutTemplateRow,
+  RarityIconRow,
 } from '@haraka/shared';
 
 const LABEL_MAP: Record<string, string> = {
@@ -83,7 +84,7 @@ async function _runRegeneratePage(supabase: Awaited<ReturnType<typeof createSupa
 
   console.log(`[regenerate-page] カード数: ${orderedCards.length}`);
 
-  // ---- 3. アセットプロファイル取得 ----
+  // ---- 3. アセットプロファイル + layout_template 取得 ----
   const { data: profiles, error: profileErr } = await supabase
     .from('asset_profile')
     .select('*')
@@ -95,68 +96,59 @@ async function _runRegeneratePage(supabase: Awaited<ReturnType<typeof createSupa
   const profile = profiles?.[0] ?? null;
   if (profileErr || !profile) throw new Error(`プロファイルが見つかりません (store=oripark, franchise=${page.franchise}): ${profileErr?.message ?? '該当なし'}`);
 
-  const layout: LayoutConfig = profile.layout_config as LayoutConfig;
+  if (!page.layout_template_id) {
+    throw new Error(`generated_page.layout_template_id が未設定です (page_id=${page.id})`);
+  }
+  const { data: layoutRow, error: layoutErr } = await supabase
+    .from('layout_template')
+    .select('*')
+    .eq('id', page.layout_template_id)
+    .single<LayoutTemplateRow>();
+  if (layoutErr || !layoutRow) throw new Error(`layout_template 取得失敗: ${layoutErr?.message ?? '該当なし'}`);
+  const layout = layoutRow.layout_config;
 
-  // ---- 4. アセットダウンロード ----
+  // ---- 4. アセットダウンロード（Storage 優先、Drive フォールバック） ----
   const accessToken = await getAccessToken();
 
-  // テンプレート
-  const label = page.page_label ?? '';
-  const isBOX = label === 'BOX' || label.startsWith('BOX-');
+  const templateBuffer = await downloadTemplateAsset({
+    supabase, storagePath: layoutRow.template_storage_path, driveId: null,
+    accessToken, label: `${page.franchise}/${layoutRow.slug} テンプレ`,
+  });
+  const cardBackBuffer = await downloadTemplateAsset({
+    supabase, storagePath: layoutRow.card_back_storage_path, driveId: null,
+    accessToken, label: `${page.franchise}/${layoutRow.slug} カード裏`,
+  });
 
-  // layout_config に BOX用テンプレートID が埋め込まれている場合がある
-  const extendedLayout = layout as LayoutConfig & {
-    templateFileId_BOX?: string;
-    cardBackId_BOX?: string;
-  };
+  console.log(`[regenerate-page] テンプレート・カード裏面ダウンロード完了（${layoutRow.slug}）`);
 
-  let templateBuffer: Buffer;
-  let cardBackBuffer: Buffer;
-
-  if (isBOX && extendedLayout.templateFileId_BOX) {
-    try {
-      const results = await Promise.all([
-        downloadDriveFile(accessToken, extendedLayout.templateFileId_BOX),
-        extendedLayout.cardBackId_BOX
-          ? downloadDriveFile(accessToken, extendedLayout.cardBackId_BOX)
-          : downloadDriveFile(accessToken, profile.card_back_image!),
-      ]);
-      templateBuffer = results[0];
-      cardBackBuffer = results[1];
-    } catch {
-      // BOXテンプレDL失敗時は通常テンプレート
-      templateBuffer = await downloadDriveFile(accessToken, profile.template_image!);
-      cardBackBuffer = await downloadDriveFile(accessToken, profile.card_back_image!);
-    }
-  } else {
-    templateBuffer = await downloadDriveFile(accessToken, profile.template_image!);
-    cardBackBuffer = await downloadDriveFile(accessToken, profile.card_back_image!);
-  }
-
-  console.log(`[regenerate-page] テンプレート・カード裏面ダウンロード完了`);
-
-  // レアリティアイコン
+  // レアリティアイコン（rarity_icon テーブル優先）
   const rarityIconBuffers = new Map<string, Buffer>();
-  const harakaDbSpreadsheetId = await getHarakaDbSpreadsheetId();
+  const neededRarities = new Set<string>();
+  for (const card of orderedCards) {
+    if (card.rarity_icon_url) neededRarities.add(card.rarity_icon_url);
+  }
+  if (neededRarities.size > 0) {
+    const { data: rarityRows } = await supabase
+      .from('rarity_icon')
+      .select('*')
+      .or(`franchise.eq.${page.franchise},franchise.is.null`)
+      .returns<RarityIconRow[]>();
+    const rarityByName = new Map<string, RarityIconRow>();
+    for (const r of rarityRows ?? []) rarityByName.set(r.name, r);
 
-  if (harakaDbSpreadsheetId && profile.rarity_icons) {
-    const rarityIcons = profile.rarity_icons as Record<string, string>;
-    const neededRarities = new Set<string>();
-    for (const card of orderedCards) {
-      if (card.rarity_icon_url) neededRarities.add(card.rarity_icon_url);
-    }
-    for (const iconUrl of neededRarities) {
-      // アイコンのDrive IDを探す
-      for (const [, driveId] of Object.entries(rarityIcons)) {
-        if (driveId === iconUrl || iconUrl.includes(driveId)) {
-          try {
-            const buf = await downloadDriveFile(accessToken, driveId);
-            rarityIconBuffers.set(iconUrl, buf);
-          } catch {
-            console.log(`[regenerate-page] アイコンDL失敗: ${iconUrl}`);
-          }
-          break;
-        }
+    for (const name of neededRarities) {
+      const icon = rarityByName.get(name);
+      try {
+        const buf = await downloadTemplateAsset({
+          supabase,
+          storagePath: icon?.storage_path ?? null,
+          driveId: icon?.drive_id ?? null,
+          accessToken,
+          label: `rarity/${name}`,
+        });
+        rarityIconBuffers.set(name, buf);
+      } catch (err) {
+        console.log(`[regenerate-page] アイコン取得失敗: ${name} — ${err instanceof Error ? err.message : err}`);
       }
     }
   }
@@ -202,26 +194,10 @@ async function _runRegeneratePage(supabase: Awaited<ReturnType<typeof createSupa
 
   console.log(`[regenerate-page] カード画像: ${cardImageBuffers.size}/${orderedCards.length}枚ダウンロード`);
 
-  // ---- 6. レイアウト微調整 ----
-  const layoutAdjust = page.franchise === 'YU-GI-OH!'
-    ? { cardYDelta: 4, priceYDelta: 0 }
-    : { cardYDelta: -2, priceYDelta: 3 };
-
-  const rowPriceAdjust: Record<number, { priceHighYDelta?: number; priceLowYDelta?: number }> = {
-    1: { priceHighYDelta: 4, priceLowYDelta: 5 },
-    2: { priceLowYDelta: 2 },
-    3: { priceHighYDelta: 3, priceLowYDelta: 1.5 },
-    4: { priceHighYDelta: 4, priceLowYDelta: 3 },
-  };
-
-  const rowCardAdjust = page.franchise === 'YU-GI-OH!'
-    ? { 1: 8, 2: 3, 3: 3, 4: 3 } as Record<number, number>
-    : undefined;
-
+  // ---- 6. 画像合成 ----
   const today = new Date();
   const dateText = `${String(today.getMonth() + 1).padStart(2, '0')}/${String(today.getDate()).padStart(2, '0')}`;
 
-  // ---- 7. 画像合成 ----
   console.log(`[regenerate-page] 画像合成開始...`);
   const imageBuffer = await composePage({
     templateBuffer,
@@ -232,17 +208,17 @@ async function _runRegeneratePage(supabase: Awaited<ReturnType<typeof createSupa
     rarityIconBuffers,
     cardImageBuffers,
     dateText,
-    skipPriceLow: isBOX,
-    layoutAdjust,
-    rowPriceAdjust,
-    rowCardAdjust,
-    totalSlots: profile.total_slots,
+    skipPriceLow: layoutRow.skip_price_low,
+    layoutAdjust: layout.layoutAdjust,
+    rowPriceAdjust: layout.rowPriceAdjust,
+    rowCardAdjust: layout.rowCardAdjust,
+    totalSlots: layoutRow.total_slots,
   });
 
-  // ---- 8. Storage アップロード ----
-  // 既存のimage_keyがあればそのまま上書き、なければ新規作成
+  // ---- 7. Storage アップロード ----
   const datePath = `${today.getFullYear()}/${String(today.getMonth() + 1).padStart(2, '0')}/${String(today.getDate()).padStart(2, '0')}`;
   const safeFranchise = page.franchise.replace(/[^a-zA-Z0-9._-]/g, '') || 'franchise';
+  const label = page.page_label ?? '';
   const safeLabel = romanizeLabel(label);
   const storageKey = page.image_key || `generated/${datePath}/${safeFranchise}/page_${page.page_index}_${safeLabel}.png`;
 
