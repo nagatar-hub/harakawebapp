@@ -28,6 +28,7 @@ import type {
   LayoutConfig,
   GeneratedPageRow,
   RuleRow,
+  LayoutTemplateRow,
 } from '@haraka/shared';
 import { FRANCHISES } from '@haraka/shared';
 
@@ -140,8 +141,19 @@ export async function runGenerate() {
         .eq('franchise', franchise)
         .returns<RuleRow[]>();
 
-      const pagePlans = planPages(validCards, rules ?? [], profile.total_slots);
-      console.log(`[generate]   ${franchise}: ${validCards.length}枚 → ${pagePlans.length}ページ`);
+      const { data: layouts } = await supabase
+        .from('layout_template')
+        .select('*')
+        .eq('store', 'oripark')
+        .eq('franchise', franchise)
+        .eq('is_active', true)
+        .returns<LayoutTemplateRow[]>();
+      if (!layouts || layouts.length === 0) {
+        throw new Error(`layout_template が未登録です (${franchise})。seed-layout-templates を先に実行してください`);
+      }
+
+      const pagePlans = planPages(validCards, rules ?? [], layouts);
+      console.log(`[generate]   ${franchise}: ${validCards.length}枚 → ${pagePlans.length}ページ（候補 ${layouts.length}種）`);
 
       if (pagePlans.length === 0) continue;
 
@@ -151,6 +163,7 @@ export async function runGenerate() {
         page_index: index,
         page_label: plan.label,
         card_ids: plan.cardIds,
+        layout_template_id: plan.layoutTemplateId,
         status: 'pending' as const,
       }));
       await batchInsert(supabase, 'generated_page', pageInserts as unknown as Record<string, unknown>[]);

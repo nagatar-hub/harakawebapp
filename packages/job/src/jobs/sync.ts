@@ -35,6 +35,7 @@ import type {
   PreparedCardRow,
   AssetProfileRow,
   RuleRow,
+  LayoutTemplateRow,
 } from '@haraka/shared';
 import { FRANCHISES, KECAK_SHEET_MAP, DB_COLS } from '@haraka/shared';
 
@@ -398,9 +399,22 @@ export async function runSync() {
         .returns<RuleRow[]>();
       if (rulesError) throw new Error(`rule 取得失敗: ${rulesError.message}`);
 
+      // layout_template 取得
+      const { data: layouts, error: layoutsError } = await supabase
+        .from('layout_template')
+        .select('*')
+        .eq('store', 'oripark')
+        .eq('franchise', franchise)
+        .eq('is_active', true)
+        .returns<LayoutTemplateRow[]>();
+      if (layoutsError) throw new Error(`layout_template 取得失敗 (${franchise}): ${layoutsError.message}`);
+      if (!layouts || layouts.length === 0) {
+        throw new Error(`layout_template が未登録です (${franchise})。seed-layout-templates スクリプトを実行してください`);
+      }
+
       // プランニング
-      const pagePlans = planPages(validCards, rules ?? [], profile.total_slots);
-      console.log(`[sync]   ${franchise}: ${pagePlans.length}ページ`);
+      const pagePlans = planPages(validCards, rules ?? [], layouts);
+      console.log(`[sync]   ${franchise}: ${pagePlans.length}ページ / 候補レイアウト ${layouts.length}種`);
 
       // タグ構成ログ
       const cardById = new Map(validCards.map(c => [c.id, c]));
@@ -425,6 +439,7 @@ export async function runSync() {
         page_index: index,
         page_label: plan.label,
         card_ids: plan.cardIds,
+        layout_template_id: plan.layoutTemplateId,
         status: 'pending' as const,
       }));
       await batchInsert(supabase, 'generated_page', pageInserts as unknown as Record<string, unknown>[]);
