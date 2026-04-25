@@ -67,49 +67,46 @@ describe('prepareCards', () => {
       expect(result[0].rarity_icon_url).toBe('1');
     });
 
-    it('price_high = kecak_price が設定される', () => {
+    it('price_high = calculateBuyPriceHigh(kecak_price) = 9500', () => {
+      // kecak=10000 → 10000 * 0.98 = 9800 → niceLowerBound(9800) = floor(9800/500)*500 = 9500
       const rawImport = makeRawImport({ kecak_price: 10000 });
       mockLookupCard.mockReturnValue(makeLookupResult());
 
       const result = prepareCards([rawImport], { exact: new Map(), nameGrade: new Map(), nameOnly: new Map() } as LookupMap, 'Pokemon');
 
-      expect(result[0].price_high).toBe(10000);
+      expect(result[0].price_high).toBe(9500);
     });
 
-    it('price_low = calculateBuyPriceLow(10000, Pokemon) = 8000', () => {
-      // 10000 は 9999 以下ではないため rate=0.80 適用
-      // 10000 * 0.80 = 8000 → niceLowerBound(8000): raw=8000 < 10000, steps=[500], v=8000 → 8000
+    it('price_low = calculateBuyPriceLow(10000, Pokemon) = 7500', () => {
+      // 10000 は 10000-19999 帯 → rate=0.78
+      // 10000 * 0.78 = 7800 → niceLowerBound(7800) = 7500
       const rawImport = makeRawImport({ kecak_price: 10000 });
       mockLookupCard.mockReturnValue(makeLookupResult());
 
       const result = prepareCards([rawImport], { exact: new Map(), nameGrade: new Map(), nameOnly: new Map() } as LookupMap, 'Pokemon');
 
-      expect(result[0].price_low).toBe(8000);
+      expect(result[0].price_low).toBe(7500);
     });
 
-    it('price_low = calculateBuyPriceLow(15000, Pokemon) = 12000', () => {
-      // 15000 * 0.80 = 12000 → niceLowerBound(12000) = 12000（1000刻み）
+    it('price_low = calculateBuyPriceLow(15000, Pokemon) = 11500', () => {
+      // 15000 * 0.78 = 11700 → niceLowerBound(11700) = 11500
       const rawImport = makeRawImport({ kecak_price: 15000 });
       mockLookupCard.mockReturnValue(makeLookupResult());
 
       const result = prepareCards([rawImport], { exact: new Map(), nameGrade: new Map(), nameOnly: new Map() } as LookupMap, 'Pokemon');
 
-      expect(result[0].price_low).toBe(12000);
+      expect(result[0].price_low).toBe(11500);
     });
 
-    it('price_low = calculateBuyPriceLow(50000, YU-GI-OH!) = 42000', () => {
-      // 50000 * 0.85 = 42500
-      // niceLowerBound(42500): 10000 <= 42500 < 100000 → steps=[1000,2000,5000]
-      //   s=1000: v=42000, diff=500
-      //   s=2000: v=42000, diff=500, step大 → bestV=42000
-      //   s=5000: v=40000, diff=2500 → no update
-      // 結果: 42000
+    it('price_low = calculateBuyPriceLow(50000, YU-GI-OH!) = 41500', () => {
+      // YU-GI-OH! 20000以上 → rate=0.83
+      // 50000 * 0.83 = 41500 → niceLowerBound(41500) = 41500
       const rawImport = makeRawImport({ kecak_price: 50000, franchise: 'YU-GI-OH!' });
       mockLookupCard.mockReturnValue(makeLookupResult());
 
       const result = prepareCards([rawImport], { exact: new Map(), nameGrade: new Map(), nameOnly: new Map() } as LookupMap, 'YU-GI-OH!');
 
-      expect(result[0].price_low).toBe(42000);
+      expect(result[0].price_low).toBe(41500);
     });
   });
 

@@ -10,7 +10,7 @@
  */
 
 import type { Franchise, Database } from '@haraka/shared';
-import { SPECTRE_MAP_COLS, normalizeText, calculateBuyPriceLow } from '@haraka/shared';
+import { SPECTRE_MAP_COLS, normalizeText, calculateBuyPriceHigh, calculateBuyPriceLow } from '@haraka/shared';
 
 type PreparedCardInsert = Database['public']['Tables']['prepared_card']['Insert'];
 
@@ -38,8 +38,8 @@ function safeNumber(value: string | undefined): number | null {
  * - 1行目（ヘッダ）はスキップ
  * - SPECTRE_NAME が空の行はスキップ
  * - source = 'spectre'
- * - price_high = BUY_PRICE（H列）
- * - price_low = calculateBuyPriceLow(price_high, franchise)
+ * - price_high = calculateBuyPriceHigh(BUY_PRICE)（×0.98、500円刻み）
+ * - price_low  = calculateBuyPriceLow(BUY_PRICE, franchise)（BUY_PRICE 基準）
  */
 export function parseSpectreRows(
   rows: string[][],
@@ -55,8 +55,9 @@ export function parseSpectreRows(
     const spectreName = getCell(row, SPECTRE_MAP_COLS.SPECTRE_NAME);
     if (!spectreName || spectreName.trim() === '') continue;
 
-    const priceHigh = safeNumber(getCell(row, SPECTRE_MAP_COLS.BUY_PRICE));
-    const priceLow = priceHigh != null && priceHigh > 0 ? calculateBuyPriceLow(priceHigh, franchise) : null;
+    const buyPrice = safeNumber(getCell(row, SPECTRE_MAP_COLS.BUY_PRICE));
+    const priceHigh = buyPrice != null && buyPrice > 0 ? calculateBuyPriceHigh(buyPrice) : null;
+    const priceLow = buyPrice != null && buyPrice > 0 ? calculateBuyPriceLow(buyPrice, franchise) : null;
 
     result.push({
       run_id: runId,

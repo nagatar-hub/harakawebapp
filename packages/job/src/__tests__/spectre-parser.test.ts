@@ -59,23 +59,25 @@ describe('parseSpectreRows', () => {
     expect(result[0].list_no).toBe('4/102');
   });
 
-  it('price_high を BUY_PRICE（index 7）から数値として取得する', () => {
+  it('price_high を BUY_PRICE から ×0.98 / 500円刻みで計算する', () => {
+    // BUY_PRICE=30000 → 30000 * 0.98 = 29400 → niceLowerBound(29400) = 29000
     const rows = [HEADER, ROW_CHARIZARD];
     const result = parseSpectreRows(rows, franchise, RUN_ID);
-    expect(result[0].price_high).toBe(30000);
+    expect(result[0].price_high).toBe(29000);
   });
 
-  it('price_high が ¥ 記号付きでも正しく数値に変換する', () => {
+  it('price_high が ¥ 記号付きでも正しく数値に変換し、×0.98 / 500円刻みで計算する', () => {
+    // BUY_PRICE='¥7,000' → 7000 * 0.98 = 6860 → niceLowerBound(6860) = 6500
     const rows = [HEADER, ROW_WITH_YEN];
     const result = parseSpectreRows(rows, franchise, RUN_ID);
-    expect(result[0].price_high).toBe(7000);
+    expect(result[0].price_high).toBe(6500);
   });
 
   it('price_low が calculateBuyPriceLow で計算される', () => {
-    // Pokemon: 30000 >= 20000 → rate=0.88 → 30000*0.88=26400 → niceLowerBound=26000
+    // Pokemon 20000以上 → rate=0.86 → 30000 * 0.86 = 25800 → niceLowerBound = 25500
     const rows = [HEADER, ROW_CHARIZARD];
     const result = parseSpectreRows(rows, franchise, RUN_ID);
-    expect(result[0].price_low).toBe(26000);
+    expect(result[0].price_low).toBe(25500);
   });
 
   it('source = "spectre" が設定される', () => {
@@ -146,7 +148,7 @@ describe('parseSpectreRows', () => {
     const rows = [HEADER, ROW_CHARIZARD];
     const result = parseSpectreRows(rows, 'YU-GI-OH!', RUN_ID);
     expect(result[0].franchise).toBe('YU-GI-OH!');
-    // YU-GI-OH!: 30000 * 0.85 = 25500 → niceLowerBound → 25000
-    expect(result[0].price_low).toBe(25000);
+    // YU-GI-OH! 20000以上 → rate=0.83 → 30000 * 0.83 = 24900 → niceLowerBound → 24500
+    expect(result[0].price_low).toBe(24500);
   });
 });

@@ -1,5 +1,5 @@
 import type { Franchise, Database } from '@haraka/shared';
-import { calculateBuyPriceLow } from '@haraka/shared';
+import { calculateBuyPriceHigh, calculateBuyPriceLow } from '@haraka/shared';
 import type { LookupMap, LookupResult } from './db-lookup.js';
 import { lookupCard } from './db-lookup.js';
 
@@ -10,8 +10,8 @@ type PreparedCardInsert = Database['public']['Tables']['prepared_card']['Insert'
  * RawImport 配列を PreparedCard の Insert 配列に変換
  *
  * 1. DB 照合（lookupCard）で tag / imageUrl / rarityIcon を付与
- * 2. calculateBuyPriceLow() で price_low を計算
- * 3. price_high = kecak_price
+ * 2. price_high = calculateBuyPriceHigh(kecak_price)（KECAK 価格 ×0.98、500円刻み）
+ * 3. price_low  = calculateBuyPriceLow(kecak_price, franchise)（KECAK 基準）
  * 4. DB 照合でマッチしなかった場合は tag = null
  *
  * @param rawImports - raw_import テーブルのレコード
@@ -31,8 +31,9 @@ export function prepareCards(
     });
 
     // kecak_price が null または 0 の場合は price_high / price_low ともに 0
-    const priceHigh = rawImport.kecak_price ?? 0;
-    const priceLow = priceHigh > 0 ? calculateBuyPriceLow(priceHigh, franchise) : 0;
+    const kecakPrice = rawImport.kecak_price ?? 0;
+    const priceHigh = calculateBuyPriceHigh(kecakPrice);
+    const priceLow = calculateBuyPriceLow(kecakPrice, franchise);
 
     return {
       run_id: rawImport.run_id,
